@@ -18,13 +18,10 @@ import {
   Send,
   FileText,
   ListTodo,
-  Calendar,
   BarChart3,
-  MessageSquare,
   Loader2,
   CheckCircle2,
-  Clock,
-  AlertTriangle
+  Clock
 } from "lucide-react"
 import Link from "next/link"
 import { formatDate } from "@/lib/utils"
@@ -67,7 +64,7 @@ const mockMessages: Message[] = [
 ]
 
 export default function ProjectDetailPage() {
-  const params = useParams()
+  useParams()
   const [activeTab, setActiveTab] = useState("overview")
   const [requirements, setRequirements] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
