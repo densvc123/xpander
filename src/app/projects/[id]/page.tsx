@@ -25,6 +25,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { formatDate } from "@/lib/utils"
+import { GanttChart } from "@/components/gantt/gantt-chart"
+import { mockGanttSprints, projectStartDate, projectEndDate } from "@/components/gantt/gantt-data"
 
 // Mock project data
 const mockProject = {
@@ -317,45 +319,11 @@ Example:
 
           {/* Gantt Tab */}
           <TabsContent value="gantt" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Timeline View
-                </CardTitle>
-                <CardDescription>Visual timeline of sprints and tasks</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {mockSprints.map((sprint, index) => (
-                    <div key={sprint.id} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">{sprint.name}</span>
-                        <span className="text-gray-500">{sprint.tasksCount} tasks</span>
-                      </div>
-                      <div className="relative h-8 bg-gray-100 rounded">
-                        <div
-                          className={`absolute h-full rounded transition-all ${
-                            sprint.status === "completed" ? "bg-emerald-500" :
-                            sprint.status === "active" ? "bg-blue-500" : "bg-gray-300"
-                          }`}
-                          style={{
-                            left: `${index * 33}%`,
-                            width: "30%"
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-xs text-gray-400 pt-2">
-                    <span>Jan 1</span>
-                    <span>Jan 14</span>
-                    <span>Jan 28</span>
-                    <span>Feb 11</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <GanttChart
+              sprints={mockGanttSprints}
+              projectStartDate={projectStartDate}
+              projectEndDate={projectEndDate}
+            />
           </TabsContent>
 
           {/* AI Advisor Tab */}
