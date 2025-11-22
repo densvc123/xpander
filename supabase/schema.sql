@@ -306,3 +306,122 @@ $$ language 'plpgsql' SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- ============================================
+-- CHANGE MANAGEMENT SYSTEM TABLES
+-- ============================================
+
+-- Project baselines (snapshots of project state)
+CREATE TABLE IF NOT EXISTS project_baselines (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT 'Initial Baseline',
+  total_hours DECIMAL(10,2) DEFAULT 0,
+  task_count INTEGER DEFAULT 0,
+  sprint_count INTEGER DEFAULT 0,
+  planned_delivery_date DATE,
+  risk_level TEXT CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+  tasks_snapshot JSONB DEFAULT '[]'::jsonb,
+  sprints_snapshot JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Change requests table
+CREATE TABLE IF NOT EXISTS change_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  change_type TEXT NOT NULL CHECK (change_type IN ('new_feature', 'modification', 'removal', 'bug', 'urgent')) DEFAULT 'modification',
+  priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
+  area TEXT CHECK (area IN ('frontend', 'backend', 'api', 'database', 'integration', 'other')) DEFAULT 'other',
+  status TEXT NOT NULL CHECK (status IN ('open', 'analyzed', 'approved', 'rejected', 'implemented')) DEFAULT 'open',
+  desired_due_date DATE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Change request analysis (AI-generated impact analysis)
+CREATE TABLE IF NOT EXISTS change_request_analysis (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  change_request_id UUID NOT NULL REFERENCES change_requests(id) ON DELETE CASCADE,
+  impact_summary TEXT,
+  affected_modules JSONB DEFAULT '[]'::jsonb,
+  new_tasks JSONB DEFAULT '[]'::jsonb,
+  updated_tasks JSONB DEFAULT '[]'::jsonb,
+  risks JSONB DEFAULT '[]'::jsonb,
+  effort_hours DECIMAL(10,2) DEFAULT 0,
+  rework_hours DECIMAL(10,2) DEFAULT 0,
+  impact_on_deadline_days INTEGER DEFAULT 0,
+  baseline_comparison JSONB DEFAULT '{}'::jsonb,
+  model_used TEXT DEFAULT 'gpt-4o-mini',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Change history (audit trail)
+CREATE TABLE IF NOT EXISTS change_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  change_request_id UUID REFERENCES change_requests(id) ON DELETE SET NULL,
+  action TEXT NOT NULL CHECK (action IN ('created', 'analyzed', 'approved', 'rejected', 'implemented', 'baseline_created')),
+  description TEXT,
+  delta_hours DECIMAL(10,2),
+  delta_days INTEGER,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for change management tables
+CREATE INDEX IF NOT EXISTS idx_project_baselines_project_id ON project_baselines(project_id);
+CREATE INDEX IF NOT EXISTS idx_change_requests_project_id ON change_requests(project_id);
+CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
+CREATE INDEX IF NOT EXISTS idx_change_request_analysis_change_request_id ON change_request_analysis(change_request_id);
+CREATE INDEX IF NOT EXISTS idx_change_history_project_id ON change_history(project_id);
+CREATE INDEX IF NOT EXISTS idx_change_history_change_request_id ON change_history(change_request_id);
+
+-- Enable RLS for change management tables
+ALTER TABLE project_baselines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE change_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE change_request_analysis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE change_history ENABLE ROW LEVEL SECURITY;
+
+-- Project baselines policies
+CREATE POLICY "Users can view own project baselines" ON project_baselines FOR SELECT
+  USING (EXISTS (SELECT 1 FROM projects WHERE projects.id = project_baselines.project_id AND projects.user_id = auth.uid()));
+CREATE POLICY "Users can create project baselines" ON project_baselines FOR INSERT
+  WITH CHECK (EXISTS (SELECT 1 FROM projects WHERE projects.id = project_baselines.project_id AND projects.user_id = auth.uid()));
+CREATE POLICY "Users can delete own project baselines" ON project_baselines FOR DELETE
+  USING (EXISTS (SELECT 1 FROM projects WHERE projects.id = project_baselines.project_id AND projects.user_id = auth.uid()));
+
+-- Change requests policies
+CREATE POLICY "Users can view own change requests" ON change_requests FOR SELECT
+  USING (EXISTS (SELECT 1 FROM projects WHERE projects.id = change_requests.project_id AND projects.user_id = auth.uid()));
+CREATE POLICY "Users can create change requests" ON change_requests FOR INSERT
+  WITH CHECK (EXISTS (SELECT 1 FROM projects WHERE projects.id = change_requests.project_id AND projects.user_id = auth.uid()));
+CREATE POLICY "Users can update own change requests" ON change_requests FOR UPDATE
+  USING (EXISTS (SELECT 1 FROM projects WHERE projects.id = change_requests.project_id AND projects.user_id = auth.uid()));
+CREATE POLICY "Users can delete own change requests" ON change_requests FOR DELETE
+  USING (EXISTS (SELECT 1 FROM projects WHERE projects.id = change_requests.project_id AND projects.user_id = auth.uid()));
+
+-- Change request analysis policies
+CREATE POLICY "Users can view own change request analyses" ON change_request_analysis FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM change_requests
+    JOIN projects ON projects.id = change_requests.project_id
+    WHERE change_requests.id = change_request_analysis.change_request_id AND projects.user_id = auth.uid()
+  ));
+CREATE POLICY "Users can create change request analyses" ON change_request_analysis FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM change_requests
+    JOIN projects ON projects.id = change_requests.project_id
+    WHERE change_requests.id = change_request_analysis.change_request_id AND projects.user_id = auth.uid()
+  ));
+
+-- Change history policies
+CREATE POLICY "Users can view own change history" ON change_history FOR SELECT
+  USING (EXISTS (SELECT 1 FROM projects WHERE projects.id = change_history.project_id AND projects.user_id = auth.uid()));
+CREATE POLICY "Users can create change history" ON change_history FOR INSERT
+  WITH CHECK (EXISTS (SELECT 1 FROM projects WHERE projects.id = change_history.project_id AND projects.user_id = auth.uid()));
+
+-- Triggers for updated_at on change_requests
+CREATE TRIGGER update_change_requests_updated_at BEFORE UPDATE ON change_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

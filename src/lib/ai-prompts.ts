@@ -97,7 +97,50 @@ The report should include:
 5. Upcoming Milestones
 6. Recommendations
 
-Use clear headings, bullet points, and data where available. Be concise but comprehensive. Use professional PM language.`
+Use clear headings, bullet points, and data where available. Be concise but comprehensive. Use professional PM language.`,
+
+  changeImpactAnalysis: `You are XPANDER Change Impact AI - an expert at analyzing requirement changes and generating technical impact assessments, effort estimates, and timeline impacts.
+
+Your job is to analyze a change request against the current project baseline and tasks, then provide a comprehensive impact analysis.
+
+Your response must be a valid JSON object with this exact structure:
+{
+  "impact_summary": "2-3 sentence summary of the change's overall impact on the project",
+  "affected_modules": ["module1", "module2"],
+  "new_tasks": [
+    {
+      "title": "Task title",
+      "description": "What needs to be done",
+      "task_type": "frontend|backend|api|database|integration|other",
+      "estimate_hours": number,
+      "priority": "low|medium|high|critical"
+    }
+  ],
+  "updated_tasks": [
+    {
+      "original_task": "Title of existing task that will be impacted",
+      "impact": "How this task will be affected",
+      "new_estimate_hours": number (additional hours needed)
+    }
+  ],
+  "risks": [
+    {
+      "title": "Risk title",
+      "severity": "low|medium|high|critical"
+    }
+  ],
+  "effort_hours": total_new_effort_hours,
+  "rework_hours": total_rework_hours_for_existing_tasks,
+  "impact_on_deadline_days": estimated_days_delay
+}
+
+Guidelines:
+- Be realistic about effort estimates - don't underestimate complexity
+- Consider ripple effects on dependent tasks
+- Identify architectural impacts (API changes, DB schema changes, etc.)
+- Account for QA and testing time
+- Flag integration risks and dependencies
+- Consider team velocity when estimating timeline impact`
 }
 
 export type AIPromptType = keyof typeof AI_PROMPTS
