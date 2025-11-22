@@ -11,7 +11,7 @@ import { Sparkles, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
 export default function SignupPage() {
-  const router = useRouter()
+  useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)

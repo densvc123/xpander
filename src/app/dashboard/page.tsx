@@ -71,7 +71,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Welcome back!</h2>
-            <p className="text-gray-500">Here's what's happening with your projects today.</p>
+            <p className="text-gray-500">Here&apos;s what&apos;s happening with your projects today.</p>
           </div>
           <Link href="/projects/new">
             <Button>
