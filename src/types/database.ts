@@ -15,6 +15,14 @@ export type InputType = 'prd_text' | 'note' | 'ui_description' | 'json_example' 
 export type ReportType = 'project_status' | 'sprint_review' | 'resource_usage' | 'custom'
 export type InsightType = 'risk' | 'suggestion' | 'warning' | 'info'
 
+// Change Management Types
+export type ChangeType = 'new_feature' | 'modification' | 'removal' | 'bug' | 'urgent'
+export type ChangePriority = 'low' | 'medium' | 'high' | 'critical'
+export type ChangeArea = 'frontend' | 'backend' | 'api' | 'database' | 'integration' | 'other'
+export type ChangeStatus = 'open' | 'analyzed' | 'approved' | 'rejected' | 'implemented'
+export type ChangeHistoryAction = 'created' | 'analyzed' | 'approved' | 'rejected' | 'implemented' | 'baseline_created'
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
+
 export interface Database {
   public: {
     Tables: {
@@ -370,6 +378,158 @@ export interface Database {
           content?: string
         }
       }
+      // Change Management Tables
+      project_baselines: {
+        Row: {
+          id: string
+          project_id: string
+          name: string
+          total_hours: number
+          task_count: number
+          sprint_count: number
+          planned_delivery_date: string | null
+          risk_level: RiskLevel | null
+          tasks_snapshot: Json
+          sprints_snapshot: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          name?: string
+          total_hours?: number
+          task_count?: number
+          sprint_count?: number
+          planned_delivery_date?: string | null
+          risk_level?: RiskLevel | null
+          tasks_snapshot?: Json
+          sprints_snapshot?: Json
+          created_at?: string
+        }
+        Update: {
+          name?: string
+          total_hours?: number
+          task_count?: number
+          sprint_count?: number
+          planned_delivery_date?: string | null
+          risk_level?: RiskLevel | null
+          tasks_snapshot?: Json
+          sprints_snapshot?: Json
+        }
+      }
+      change_requests: {
+        Row: {
+          id: string
+          project_id: string
+          title: string
+          description: string | null
+          change_type: ChangeType
+          priority: ChangePriority
+          area: ChangeArea | null
+          status: ChangeStatus
+          desired_due_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          title: string
+          description?: string | null
+          change_type?: ChangeType
+          priority?: ChangePriority
+          area?: ChangeArea | null
+          status?: ChangeStatus
+          desired_due_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          description?: string | null
+          change_type?: ChangeType
+          priority?: ChangePriority
+          area?: ChangeArea | null
+          status?: ChangeStatus
+          desired_due_date?: string | null
+          updated_at?: string
+        }
+      }
+      change_request_analysis: {
+        Row: {
+          id: string
+          change_request_id: string
+          impact_summary: string | null
+          affected_modules: Json
+          new_tasks: Json
+          updated_tasks: Json
+          risks: Json
+          effort_hours: number
+          rework_hours: number
+          impact_on_deadline_days: number
+          baseline_comparison: Json
+          model_used: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          change_request_id: string
+          impact_summary?: string | null
+          affected_modules?: Json
+          new_tasks?: Json
+          updated_tasks?: Json
+          risks?: Json
+          effort_hours?: number
+          rework_hours?: number
+          impact_on_deadline_days?: number
+          baseline_comparison?: Json
+          model_used?: string
+          created_at?: string
+        }
+        Update: {
+          impact_summary?: string | null
+          affected_modules?: Json
+          new_tasks?: Json
+          updated_tasks?: Json
+          risks?: Json
+          effort_hours?: number
+          rework_hours?: number
+          impact_on_deadline_days?: number
+          baseline_comparison?: Json
+          model_used?: string
+        }
+      }
+      change_history: {
+        Row: {
+          id: string
+          project_id: string
+          change_request_id: string | null
+          action: ChangeHistoryAction
+          description: string | null
+          delta_hours: number | null
+          delta_days: number | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          change_request_id?: string | null
+          action: ChangeHistoryAction
+          description?: string | null
+          delta_hours?: number | null
+          delta_days?: number | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          action?: ChangeHistoryAction
+          description?: string | null
+          delta_hours?: number | null
+          delta_days?: number | null
+          metadata?: Json
+        }
+      }
     }
   }
 }
@@ -392,3 +552,57 @@ export type GanttItem = Tables<'gantt_items'>
 export type AIInsight = Tables<'ai_insights'>
 export type Report = Tables<'reports'>
 export type AdvisorMessage = Tables<'advisor_messages'>
+
+// Change Management Types
+export type ProjectBaseline = Tables<'project_baselines'>
+export type ChangeRequest = Tables<'change_requests'>
+export type ChangeRequestAnalysis = Tables<'change_request_analysis'>
+export type ChangeHistory = Tables<'change_history'>
+
+// Change Request with Analysis (joined type)
+export interface ChangeRequestWithAnalysis extends ChangeRequest {
+  change_request_analysis?: ChangeRequestAnalysis[]
+}
+
+// AI Analysis Response Types
+export interface ChangeImpactNewTask {
+  title: string
+  description: string
+  task_type: 'frontend' | 'backend' | 'api' | 'database' | 'integration' | 'other'
+  estimate_hours: number
+  priority: 'low' | 'medium' | 'high' | 'critical'
+}
+
+export interface ChangeImpactUpdatedTask {
+  original_task: string
+  impact: string
+  new_estimate_hours: number
+}
+
+export interface ChangeImpactRisk {
+  title: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+}
+
+export interface ChangeImpactAnalysisResult {
+  impact_summary: string
+  affected_modules: string[]
+  new_tasks: ChangeImpactNewTask[]
+  updated_tasks: ChangeImpactUpdatedTask[]
+  risks: ChangeImpactRisk[]
+  effort_hours: number
+  rework_hours: number
+  impact_on_deadline_days: number
+}
+
+export interface BaselineComparison {
+  baseline_total_hours: number
+  new_total_hours: number
+  delta_hours: number
+  baseline_delivery_date: string | null
+  new_delivery_date: string | null
+  delta_days: number
+  baseline_sprint_count: number
+  new_sprint_count: number
+  sprint_overload: string[]
+}
