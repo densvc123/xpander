@@ -9,6 +9,7 @@ import {
   FileText,
   Settings,
   Sparkles,
+  Users,
   ChevronLeft,
   ChevronRight,
   X
@@ -19,6 +20,7 @@ import { Button } from "@/components/ui/button"
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderKanban },
+  { name: "Resources", href: "/resources", icon: Users },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "Settings", href: "/settings", icon: Settings },
 ]

@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import type { DragEvent } from "react"
 import { useParams } from "next/navigation"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -42,8 +43,7 @@ import {
   Plus,
   GitPullRequest,
   AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight,
+  CalendarRange,
   History,
   Target,
   X,
@@ -56,7 +56,6 @@ import Link from "next/link"
 import { formatDate } from "@/lib/utils"
 import { GanttChart } from "@/components/gantt/gantt-chart"
 import { mockGanttSprints, projectStartDate, projectEndDate } from "@/components/gantt/gantt-data"
-import { ResourceWorkload } from "@/components/resources/resource-workload"
 import type {
   ChangeRequest,
   ChangeRequestAnalysis,
@@ -79,21 +78,49 @@ const mockProject = {
   created_at: "2024-01-01"
 }
 
-// Mock tasks
-const mockTasks = [
-  { id: "1", title: "Set up Next.js project", type: "frontend", status: "completed", estimatedHours: 2 },
-  { id: "2", title: "Configure Supabase database", type: "database", status: "completed", estimatedHours: 3 },
-  { id: "3", title: "Build authentication system", type: "backend", status: "in_progress", estimatedHours: 5 },
-  { id: "4", title: "Create dashboard UI", type: "frontend", status: "in_progress", estimatedHours: 8 },
-  { id: "5", title: "Implement AI analysis endpoint", type: "backend", status: "pending", estimatedHours: 6 },
-  { id: "6", title: "Build task breakdown feature", type: "backend", status: "pending", estimatedHours: 4 },
+// Mock sprints
+const initialSprints = [
+  {
+    id: "1",
+    name: "Sprint 1",
+    status: "completed",
+    startDate: "2024-01-01",
+    endDate: "2024-01-14",
+    tasks: [
+      { id: "1", title: "Set up Next.js project", type: "frontend", status: "completed", estimatedHours: 2 },
+      { id: "2", title: "Configure Supabase database", type: "database", status: "completed", estimatedHours: 3 }
+    ]
+  },
+  {
+    id: "2",
+    name: "Sprint 2",
+    status: "active",
+    startDate: "2024-01-15",
+    endDate: "2024-01-28",
+    tasks: [
+      { id: "3", title: "Build authentication system", type: "backend", status: "in_progress", estimatedHours: 5 },
+      { id: "4", title: "Create dashboard UI", type: "frontend", status: "in_progress", estimatedHours: 8 }
+    ]
+  },
+  {
+    id: "3",
+    name: "Sprint 3",
+    status: "planned",
+    startDate: "2024-01-29",
+    endDate: "2024-02-11",
+    tasks: [
+      { id: "5", title: "Implement AI analysis endpoint", type: "backend", status: "pending", estimatedHours: 6 },
+      { id: "6", title: "Build task breakdown feature", type: "backend", status: "pending", estimatedHours: 4 }
+    ]
+  }
 ]
 
-// Mock sprints
-const mockSprints = [
-  { id: "1", name: "Sprint 1", status: "completed", startDate: "2024-01-01", endDate: "2024-01-14", tasksCount: 10 },
-  { id: "2", name: "Sprint 2", status: "active", startDate: "2024-01-15", endDate: "2024-01-28", tasksCount: 12 },
-  { id: "3", name: "Sprint 3", status: "planned", startDate: "2024-01-29", endDate: "2024-02-11", tasksCount: 8 },
+// Mock team + capacity
+const mockTeamMembers = [
+  { id: "1", name: "Ava Chen", role: "Engineering Lead", capacityHours: 30, workloadHours: 28 },
+  { id: "2", name: "Leo Park", role: "Frontend", capacityHours: 32, workloadHours: 26 },
+  { id: "3", name: "Maya Singh", role: "Backend", capacityHours: 32, workloadHours: 34 },
+  { id: "4", name: "Noah Wright", role: "Product", capacityHours: 25, workloadHours: 18 }
 ]
 
 // Message type for advisor
@@ -109,6 +136,21 @@ interface ChangeRequestWithAnalysis extends ChangeRequest {
   change_request_analysis?: ChangeRequestAnalysis[]
 }
 
+type RequirementsAnalysis = {
+  summary: string
+  highlights: string[]
+  backlog: { id: string; title: string; estimate: number; type: string; sprint: string }[]
+  risks: string[]
+  sprintPlan: { name: string; goal: string; points: number; window: string }[]
+}
+
+const getDaysUntil = (dateString: string) => {
+  const now = new Date()
+  const target = new Date(dateString)
+  const diff = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  return Math.max(diff, 0)
+}
+
 export default function ProjectDetailPage() {
   const params = useParams()
   const projectId = params.id as string
@@ -118,6 +160,14 @@ export default function ProjectDetailPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [advisorInput, setAdvisorInput] = useState("")
   const [messages, setMessages] = useState<Message[]>(mockMessages)
+  const [timelineView, setTimelineView] = useState<"list" | "calendar">("list")
+  const [requirementsAnalysis, setRequirementsAnalysis] = useState<RequirementsAnalysis | null>(null)
+  const [hasCreatedSprintPlan, setHasCreatedSprintPlan] = useState(false)
+  const [sprints, setSprints] = useState(initialSprints)
+  const [draggingTask, setDraggingTask] = useState<{ taskId: string; fromSprintId: string } | null>(null)
+  const [dragOverSprintId, setDragOverSprintId] = useState<string | null>(null)
+  const [addTaskDialog, setAddTaskDialog] = useState<{ open: boolean; sprintId: string | null }>({ open: false, sprintId: null })
+  const [newTaskForm, setNewTaskForm] = useState({ title: "", estimate: "", type: "frontend" })
 
   // Change Management State
   const [changeRequests, setChangeRequests] = useState<ChangeRequestWithAnalysis[]>([])
@@ -142,6 +192,28 @@ export default function ProjectDetailPage() {
   const [newChangeType, setNewChangeType] = useState<ChangeType>("modification")
   const [newChangePriority, setNewChangePriority] = useState<ChangePriority>("medium")
   const [newChangeArea, setNewChangeArea] = useState<ChangeArea>("other")
+
+  const totalTasks = sprints.reduce((sum, sprint) => sum + sprint.tasks.length, 0)
+  const completedTasks = sprints.reduce(
+    (sum, sprint) => sum + sprint.tasks.filter((task) => task.status === "completed").length,
+    0
+  )
+  const sprintCounts = {
+    completed: sprints.filter((sprint) => sprint.status === "completed").length,
+    active: sprints.filter((sprint) => sprint.status === "active").length,
+    planned: sprints.filter((sprint) => sprint.status === "planned").length
+  }
+  const totalCapacityHours = mockTeamMembers.reduce((sum, member) => sum + member.capacityHours, 0)
+  const totalWorkloadHours = mockTeamMembers.reduce((sum, member) => sum + member.workloadHours, 0)
+  const utilization = totalCapacityHours > 0 ? Math.min(100, Math.round((totalWorkloadHours / totalCapacityHours) * 100)) : 0
+  const overloadedMembers = mockTeamMembers.filter((member) => member.workloadHours > member.capacityHours)
+  const daysRemaining = getDaysUntil(mockProject.deadline)
+  const activeSprint = sprints.find((sprint) => sprint.status === "active")
+  const activeSprintCompleted = activeSprint?.tasks.filter((task) => task.status === "completed").length || 0
+  const activeSprintProgress = activeSprint && activeSprint.tasks.length > 0
+    ? Math.round((activeSprintCompleted / activeSprint.tasks.length) * 100)
+    : 0
+  const activeSprintOpenTasks = activeSprint ? activeSprint.tasks.filter((task) => task.status !== "completed") : []
 
   // Fetch change requests
   const fetchChangeRequests = useCallback(async () => {
@@ -314,8 +386,33 @@ export default function ProjectDetailPage() {
   const handleAnalyze = async () => {
     setIsAnalyzing(true)
     await new Promise(resolve => setTimeout(resolve, 2000))
+    setRequirementsAnalysis({
+      summary: "AI analyzed your requirements and broke them into 10 backlog items across auth, dashboard, and reporting. Suggested scope fits two sprints within the 24-day window.",
+      highlights: [
+        "Core flows prioritized: auth, dashboard data, reporting",
+        "Dependencies: database first, then API, then UI",
+        "Capacity fit: ~46h of work aligned to current team load"
+      ],
+      backlog: [
+        { id: "R-1", title: "Email/password authentication", estimate: 6, type: "backend", sprint: "Sprint 2" },
+        { id: "R-2", title: "Role-based access control", estimate: 5, type: "backend", sprint: "Sprint 2" },
+        { id: "R-3", title: "Project overview dashboard", estimate: 8, type: "frontend", sprint: "Sprint 2" },
+        { id: "R-4", title: "Resource workload view", estimate: 6, type: "frontend", sprint: "Sprint 3" },
+        { id: "R-5", title: "Reporting export (PDF/CSV)", estimate: 7, type: "backend", sprint: "Sprint 3" }
+      ],
+      risks: [
+        "Export format scope creep (PDF layout vs CSV)",
+        "RBAC testing could add 1-2 days if roles expand",
+        "Data quality for dashboard depends on API readiness"
+      ],
+      sprintPlan: [
+        { name: "Sprint 2", goal: "Ship auth + dashboard skeleton", points: 24, window: "Jan 15 - Jan 28" },
+        { name: "Sprint 3", goal: "Finalize reporting + workload view", points: 22, window: "Jan 29 - Feb 11" }
+      ]
+    })
+    setHasCreatedSprintPlan(false)
     setIsAnalyzing(false)
-    setActiveTab("tasks")
+    setActiveTab("requirements")
   }
 
   const handleSendMessage = () => {
@@ -326,6 +423,81 @@ export default function ProjectDetailPage() {
       { role: "assistant" as const, content: "Based on your current progress, you're on track to meet your deadline. The authentication system is 60% complete, and I'd recommend prioritizing the dashboard UI next to maintain momentum." }
     ])
     setAdvisorInput("")
+  }
+
+  const handleTaskDragStart = (taskId: string, fromSprintId: string) => {
+    setDraggingTask({ taskId, fromSprintId })
+  }
+
+  const handleTaskDragOver = (event: DragEvent, sprintId: string) => {
+    event.preventDefault()
+    setDragOverSprintId(sprintId)
+  }
+
+  const handleTaskDragLeave = () => {
+    setDragOverSprintId(null)
+  }
+
+  const handleTaskDrop = (event: DragEvent, targetSprintId: string) => {
+    event.preventDefault()
+    setDragOverSprintId(null)
+    if (!draggingTask || targetSprintId === draggingTask.fromSprintId) {
+      setDraggingTask(null)
+      return
+    }
+
+    setSprints((prev) => {
+      let movedTask: { id: string; title: string; type: string; status: string; estimatedHours: number } | null = null
+
+      const withoutSource = prev.map((sprint) => {
+        if (sprint.id === draggingTask.fromSprintId) {
+          const task = sprint.tasks.find((t) => t.id === draggingTask.taskId)
+          if (!task) return sprint
+          movedTask = task
+          return { ...sprint, tasks: sprint.tasks.filter((t) => t.id !== draggingTask.taskId) }
+        }
+        return sprint
+      })
+
+      if (!movedTask) return prev
+
+      return withoutSource.map((sprint) => {
+        if (sprint.id === targetSprintId) {
+          return { ...sprint, tasks: [...sprint.tasks, movedTask!] }
+        }
+        return sprint
+      })
+    })
+
+    setDraggingTask(null)
+  }
+
+  const openAddTaskDialog = (sprintId: string) => {
+    setAddTaskDialog({ open: true, sprintId })
+    setNewTaskForm({ title: "", estimate: "", type: "frontend" })
+  }
+
+  const handleAddTaskFromDialog = () => {
+    if (!addTaskDialog.sprintId || !newTaskForm.title.trim()) return
+
+    const estimateNum = Number(newTaskForm.estimate)
+    const normalizedEstimate = Number.isFinite(estimateNum) && estimateNum > 0 ? Math.round(estimateNum) : 1
+
+    const newTask = {
+      id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: newTaskForm.title.trim(),
+      type: newTaskForm.type,
+      status: "pending",
+      estimatedHours: normalizedEstimate
+    }
+
+    setSprints((prev) =>
+      prev.map((sprint) =>
+        sprint.id === addTaskDialog.sprintId ? { ...sprint, tasks: [...sprint.tasks, newTask] } : sprint
+      )
+    )
+
+    setAddTaskDialog({ open: false, sprintId: null })
   }
 
   // Helper functions for badges
@@ -382,13 +554,11 @@ export default function ProjectDetailPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-9">
+            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-7">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="requirements">Requirements</TabsTrigger>
-              <TabsTrigger value="tasks">Tasks</TabsTrigger>
               <TabsTrigger value="sprints">Sprints</TabsTrigger>
-              <TabsTrigger value="resources">Resources</TabsTrigger>
-              <TabsTrigger value="gantt">Gantt</TabsTrigger>
+              <TabsTrigger value="timeline">Project Timeline</TabsTrigger>
               <TabsTrigger value="changes">Changes</TabsTrigger>
               <TabsTrigger value="advisor">AI Advisor</TabsTrigger>
               <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -397,65 +567,194 @@ export default function ProjectDetailPage() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-500">Tasks</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">18/40</div>
-                  <p className="text-sm text-gray-500">completed</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-500">Sprints</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">1/3</div>
-                  <p className="text-sm text-gray-500">completed</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-500">Time Remaining</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">24</div>
-                  <p className="text-sm text-gray-500">days</p>
-                </CardContent>
-              </Card>
-            </div>
-
             <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
+              <CardHeader className="pb-2">
+                <CardTitle>Project pulse</CardTitle>
+                <CardDescription>Concise snapshot for the project manager</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => setActiveTab("requirements")}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Add Requirements
-                  </Button>
-                  <Button variant="outline" onClick={() => setActiveTab("tasks")}>
-                    <ListTodo className="h-4 w-4 mr-2" />
-                    View Tasks
-                  </Button>
-                  <Button variant="outline" onClick={() => setActiveTab("resources")}>
-                    <Users className="h-4 w-4 mr-2" />
-                    Team Resources
-                  </Button>
-                  <Button variant="outline" onClick={() => setActiveTab("changes")}>
-                    <GitPullRequest className="h-4 w-4 mr-2" />
-                    Change Requests
-                  </Button>
-                  <Button variant="outline" onClick={() => setActiveTab("advisor")}>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Ask AI Advisor
-                  </Button>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="success">{mockProject.health}</Badge>
+                      <span className="text-sm text-gray-500">Health</span>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm text-gray-500">
+                        <span>Overall progress</span>
+                        <span className="font-medium text-gray-900">{mockProject.progress}%</span>
+                      </div>
+                      <Progress value={mockProject.progress} className="h-2" />
+                    </div>
+                  </div>
+                  <div className="w-full rounded-lg border bg-gray-50 p-3 md:w-auto">
+                    <p className="text-xs text-gray-500">Delivery target</p>
+                    <p className="font-semibold text-gray-900">{formatDate(mockProject.deadline)}</p>
+                    <p className="text-sm text-gray-500">{daysRemaining} days left</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-gray-500">Scope</p>
+                    <p className="text-lg font-semibold">{completedTasks}/{totalTasks} tasks</p>
+                    <p className="text-xs text-gray-500">{totalTasks - completedTasks} remaining</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-gray-500">Sprints</p>
+                    <p className="text-lg font-semibold">{sprintCounts.active} active • {sprintCounts.planned} upcoming</p>
+                    <p className="text-xs text-gray-500">{sprintCounts.completed} completed</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-gray-500">Time</p>
+                    <p className="text-lg font-semibold">{daysRemaining} days left</p>
+                    <p className="text-xs text-gray-500">Deadline {formatDate(mockProject.deadline)}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle>Active sprint focus</CardTitle>
+                  <CardDescription>Top items to keep delivery on track</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {activeSprint ? (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium">{activeSprint.name}</p>
+                          <p className="text-sm text-gray-500">
+                            {formatDate(activeSprint.startDate)} - {formatDate(activeSprint.endDate)} • {activeSprint.tasks.length} tasks
+                          </p>
+                        </div>
+                        <Badge variant="default">Active</Badge>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm text-gray-500">
+                          <span>Progress</span>
+                          <span>{activeSprintProgress}%</span>
+                        </div>
+                        <Progress value={activeSprintProgress} className="h-2" />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-500">Next up</p>
+                        <div className="space-y-2">
+                          {activeSprintOpenTasks.slice(0, 3).map((task) => (
+                            <div key={task.id} className="flex items-center justify-between rounded-md border p-2">
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1 rounded ${
+                                  task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
+                                }`}>
+                                  {task.status === "in_progress" ? (
+                                    <Play className="h-4 w-4 text-blue-600" />
+                                  ) : (
+                                    <Clock className="h-4 w-4 text-gray-400" />
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium">{task.title}</p>
+                                  <p className="text-xs text-gray-500">{task.estimatedHours}h • {task.type}</p>
+                                </div>
+                              </div>
+                              <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
+                            </div>
+                          ))}
+                          {activeSprintOpenTasks.length === 0 && (
+                            <p className="text-sm text-gray-500">All tasks completed for this sprint.</p>
+                          )}
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setActiveTab("sprints")}>
+                        Open sprint board
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="text-sm text-gray-500">
+                      No active sprint. Plan the next sprint to keep momentum.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle>Priority actions</CardTitle>
+                  <CardDescription>Fast paths for the week</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-2">
+                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("timeline")}>
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      Review project timeline
+                    </Button>
+                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("sprints")}>
+                      <ListTodo className="h-4 w-4 mr-2" />
+                      Finalize sprint scope
+                    </Button>
+                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("requirements")}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Refine requirements with AI
+                    </Button>
+                    <Link href="/resources">
+                      <Button variant="outline" className="justify-start w-full">
+                        <Users className="h-4 w-4 mr-2" />
+                        Resource planning
+                      </Button>
+                    </Link>
+                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("changes")}>
+                      <GitPullRequest className="h-4 w-4 mr-2" />
+                      Review change requests
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle>Team & workload</CardTitle>
+                  <CardDescription>Capacity and load this week</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>Utilization</span>
+                    <span className="font-medium text-gray-900">{utilization}%</span>
+                  </div>
+                  <Progress value={utilization} className="h-2" />
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <Badge variant="outline">Capacity {totalCapacityHours}h</Badge>
+                    <Badge variant={totalWorkloadHours > totalCapacityHours ? "destructive" : "secondary"}>
+                      Load {totalWorkloadHours}h
+                    </Badge>
+                  </div>
+                  {overloadedMembers.length > 0 ? (
+                    <p className="text-xs text-amber-600">{overloadedMembers.length} teammate(s) over capacity</p>
+                  ) : (
+                    <p className="text-xs text-gray-500">All team members within capacity</p>
+                  )}
+                  <div className="divide-y rounded-lg border">
+                    {mockTeamMembers.slice(0, 3).map((member) => {
+                      const isOver = member.workloadHours > member.capacityHours
+                      return (
+                        <div key={member.id} className="flex items-center justify-between p-3">
+                          <div>
+                            <p className="text-sm font-medium">{member.name}</p>
+                            <p className="text-xs text-gray-500">{member.role}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold">{member.workloadHours}/{member.capacityHours}h</p>
+                            <p className={`text-xs ${isOver ? "text-red-500" : "text-gray-500"}`}>
+                              {isOver ? "Over capacity" : `${member.capacityHours - member.workloadHours}h available`}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Requirements Tab */}
@@ -500,51 +799,104 @@ Example:
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          {/* Tasks Tab */}
-          <TabsContent value="tasks" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">Tasks</h3>
-                <p className="text-sm text-gray-500">{mockTasks.length} tasks total</p>
-              </div>
-              <Button>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Generate Tasks
-              </Button>
-            </div>
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y">
-                  {mockTasks.map((task) => (
-                    <div key={task.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-1 rounded ${
-                          task.status === "completed" ? "bg-emerald-100" :
-                          task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
-                        }`}>
-                          {task.status === "completed" ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          ) : task.status === "in_progress" ? (
-                            <Play className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <Clock className="h-4 w-4 text-gray-400" />
-                          )}
-                        </div>
-                        <div>
-                          <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
-                            {task.title}
-                          </p>
-                          <p className="text-sm text-gray-500">{task.type} • {task.estimatedHours}h</p>
-                        </div>
+            {requirementsAnalysis ? (
+              <div className="grid gap-4 lg:grid-cols-3">
+                <Card className="lg:col-span-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle>AI requirements breakdown</CardTitle>
+                    <CardDescription>{requirementsAnalysis.summary}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Highlights</p>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        {requirementsAnalysis.highlights.map((item, idx) => (
+                          <div key={idx} className="rounded-md border bg-gray-50 p-3 text-sm">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 inline mr-2" />
+                            {item}
+                          </div>
+                        ))}
                       </div>
-                      <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>Backlog items (all scoped work)</span>
+                        <span className="text-gray-400">Backlog = full list • Sprint = allocation</span>
+                      </div>
+                      <div className="divide-y rounded-lg border">
+                        {requirementsAnalysis.backlog.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between p-3">
+                            <div>
+                              <p className="font-medium">{item.title}</p>
+                              <p className="text-xs text-gray-500">{item.type} • {item.estimate}h • {item.sprint}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">Backlog</Badge>
+                              <Badge variant="secondary">{item.sprint}</Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Risks to monitor</p>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        {requirementsAnalysis.risks.map((risk, idx) => (
+                          <div key={idx} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                            <AlertTriangle className="h-4 w-4 inline mr-2" />
+                            {risk}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle>Sprint plan preview</CardTitle>
+                    <CardDescription>How the AI would create sprints</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>Sprint plan (allocation of backlog)</span>
+                        <span className="text-gray-400">Each sprint = goal + points + window</span>
+                      </div>
+                      {requirementsAnalysis.sprintPlan.map((sprint) => (
+                        <div key={sprint.name} className="rounded-lg border p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium">{sprint.name}</p>
+                            <Badge variant="secondary">{sprint.points} pts</Badge>
+                          </div>
+                          <p className="text-xs text-gray-500">{sprint.window}</p>
+                          <p className="text-sm text-gray-700">{sprint.goal}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          setHasCreatedSprintPlan(true)
+                          setActiveTab("sprints")
+                        }}
+                      >
+                        Create sprint plan
+                      </Button>
+                      {hasCreatedSprintPlan ? (
+                        <p className="text-xs text-emerald-600">Sprint plan prepared. Open the Sprints tab to review.</p>
+                      ) : (
+                        <p className="text-xs text-gray-500 text-center">Previewed only — click to push into sprints</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
           </TabsContent>
 
           {/* Sprints Tab */}
@@ -552,53 +904,290 @@ Example:
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Sprints</h3>
-                <p className="text-sm text-gray-500">{mockSprints.length} sprints planned</p>
+                <p className="text-sm text-gray-500">
+                  {sprints.length} sprints • {totalTasks} tasks
+                </p>
+                <p className="text-xs text-gray-500">Drag tasks between sprints to fine-tune scope and load.</p>
               </div>
-              <Button>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Plan Sprints
-              </Button>
+              <Link href="/resources">
+                <Button variant="outline">
+                  <Users className="h-4 w-4 mr-2" />
+                  Resource Planning
+                </Button>
+              </Link>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              {mockSprints.map((sprint) => (
-                <Card key={sprint.id} className={sprint.status === "active" ? "ring-2 ring-emerald-500" : ""}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{sprint.name}</CardTitle>
-                      <Badge variant={
-                        sprint.status === "completed" ? "success" :
-                        sprint.status === "active" ? "default" : "secondary"
-                      }>
-                        {sprint.status}
-                      </Badge>
+            <div className="space-y-4">
+              {sprints.map((sprint) => {
+                const completedTasks = sprint.tasks.filter((task) => task.status === "completed").length
+                const progress = sprint.tasks.length > 0 ? Math.round((completedTasks / sprint.tasks.length) * 100) : 0
+
+                return (
+                  <Card
+                    key={sprint.id}
+                    className={`${sprint.status === "active" ? "ring-2 ring-emerald-500" : ""} ${dragOverSprintId === sprint.id ? "border-2 border-dashed border-emerald-400" : ""}`}
+                    onDragOver={(e) => handleTaskDragOver(e, sprint.id)}
+                    onDragLeave={handleTaskDragLeave}
+                    onDrop={(e) => handleTaskDrop(e, sprint.id)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{sprint.name}</CardTitle>
+                          <CardDescription>
+                            {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
+                          </CardDescription>
+                          <div className="mt-3 space-y-1">
+                            <div className="flex items-center justify-between text-sm text-gray-500">
+                              <span>{progress}% complete</span>
+                              <span>{completedTasks}/{sprint.tasks.length} tasks</span>
+                            </div>
+                            <Progress value={progress} className="h-2" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            sprint.status === "completed" ? "success" :
+                            sprint.status === "active" ? "default" : "secondary"
+                          }>
+                            {sprint.status}
+                          </Badge>
+                          <Button variant="outline" size="sm" onClick={() => openAddTaskDialog(sprint.id)}>
+                            Add Task
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>Drag to reorder or move to another sprint</span>
+                          <span>{completedTasks}/{sprint.tasks.length} done</span>
+                        </div>
+                        <div className="divide-y rounded-lg border">
+                          {sprint.tasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className="flex items-center justify-between p-4 cursor-grab"
+                              draggable
+                              onDragStart={() => handleTaskDragStart(task.id, sprint.id)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`p-1 rounded ${
+                                  task.status === "completed" ? "bg-emerald-100" :
+                                  task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
+                                }`}>
+                                  {task.status === "completed" ? (
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                  ) : task.status === "in_progress" ? (
+                                    <Play className="h-4 w-4 text-blue-600" />
+                                  ) : (
+                                    <Clock className="h-4 w-4 text-gray-400" />
+                                  )}
+                                </div>
+                                <div>
+                                  <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
+                                    {task.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                                    <Badge variant="outline" className="text-[10px] capitalize">{task.type}</Badge>
+                                    <span>{task.estimatedHours}h</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            <Dialog
+              open={addTaskDialog.open}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setAddTaskDialog({ open: false, sprintId: null })
+                }
+              }}
+            >
+              <DialogContent className="sm:max-w-[450px]">
+                <DialogHeader>
+                  <DialogTitle>Add task to sprint</DialogTitle>
+                  <DialogDescription>
+                    {addTaskDialog.sprintId
+                      ? `Sprint: ${sprints.find((s) => s.id === addTaskDialog.sprintId)?.name || ""}`
+                      : "Select a sprint to assign this task."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="add-task-title">Title</Label>
+                    <Input
+                      id="add-task-title"
+                      placeholder="e.g., Implement login screen"
+                      value={newTaskForm.title}
+                      onChange={(e) => setNewTaskForm((prev) => ({ ...prev, title: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label>Type</Label>
+                      <Select
+                        value={newTaskForm.type}
+                        onValueChange={(val) => setNewTaskForm((prev) => ({ ...prev, type: val }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="frontend">Frontend</SelectItem>
+                          <SelectItem value="backend">Backend</SelectItem>
+                          <SelectItem value="api">API</SelectItem>
+                          <SelectItem value="ux">UX</SelectItem>
+                          <SelectItem value="qa">QA</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <CardDescription>
-                      {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-500">{sprint.tasksCount} tasks</p>
-                  </CardContent>
-                </Card>
-              ))}
+                    <div className="space-y-1">
+                      <Label htmlFor="add-task-estimate">Estimate (hrs)</Label>
+                      <Input
+                        id="add-task-estimate"
+                        type="number"
+                        min={1}
+                        placeholder="8"
+                        value={newTaskForm.estimate}
+                        onChange={(e) => setNewTaskForm((prev) => ({ ...prev, estimate: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setAddTaskDialog({ open: false, sprintId: null })}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAddTaskFromDialog}
+                    disabled={!addTaskDialog.sprintId || !newTaskForm.title.trim()}
+                  >
+                    Add Task
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          {/* Project Timeline Tab */}
+          <TabsContent value="timeline" className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Project Timeline</h3>
+                <p className="text-sm text-gray-500">Review sprints as a list or switch to calendar view</p>
+              </div>
+              <div className="flex items-center gap-2 rounded-md border bg-gray-50 p-1">
+                <Button
+                  size="sm"
+                  variant={timelineView === "list" ? "default" : "ghost"}
+                  className="gap-1"
+                  onClick={() => setTimelineView("list")}
+                >
+                  <ListTodo className="h-4 w-4" />
+                  List
+                </Button>
+                <Button
+                  size="sm"
+                  variant={timelineView === "calendar" ? "default" : "ghost"}
+                  className="gap-1"
+                  onClick={() => setTimelineView("calendar")}
+                >
+                  <CalendarRange className="h-4 w-4" />
+                  Calendar
+                </Button>
+              </div>
             </div>
+
+            {timelineView === "list" ? (
+              <Card>
+                <CardContent className="p-0">
+                  <div className="divide-y">
+                    {sprints.map((sprint) => {
+                      const completedTasks = sprint.tasks.filter((task) => task.status === "completed").length
+                      const progress = sprint.tasks.length > 0 ? Math.round((completedTasks / sprint.tasks.length) * 100) : 0
+
+                      return (
+                        <div key={sprint.id} className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">{sprint.name}</p>
+                              <p className="text-sm text-gray-500">
+                                {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)} • {sprint.tasks.length} tasks
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={
+                                sprint.status === "completed" ? "success" :
+                                sprint.status === "active" ? "default" : "secondary"
+                              }>
+                                {sprint.status}
+                              </Badge>
+                              <Button variant="outline" size="sm" onClick={() => openAddTaskDialog(sprint.id)}>
+                                Add Task
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 space-y-3">
+                            <div className="flex items-center justify-between text-sm text-gray-500">
+                              <span>{progress}% complete</span>
+                              <span>{completedTasks}/{sprint.tasks.length} tasks</span>
+                            </div>
+                            <Progress value={progress} className="h-2" />
+                            <div className="divide-y rounded-lg border">
+                              {sprint.tasks.map((task) => (
+                                <div key={task.id} className="flex items-center justify-between p-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`p-1 rounded ${
+                                      task.status === "completed" ? "bg-emerald-100" :
+                                      task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
+                                    }`}>
+                                      {task.status === "completed" ? (
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                      ) : task.status === "in_progress" ? (
+                                        <Play className="h-4 w-4 text-blue-600" />
+                                      ) : (
+                                        <Clock className="h-4 w-4 text-gray-400" />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
+                                        {task.title}
+                                      </p>
+                                      <p className="text-sm text-gray-500">{task.type} • {task.estimatedHours}h</p>
+                                    </div>
+                                  </div>
+                                  <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <GanttChart
+                sprints={mockGanttSprints}
+                projectStartDate={projectStartDate}
+                projectEndDate={projectEndDate}
+              />
+            )}
           </TabsContent>
 
-          {/* Gantt Tab */}
-          <TabsContent value="gantt" className="space-y-6">
-            <GanttChart
-              sprints={mockGanttSprints}
-              projectStartDate={projectStartDate}
-              projectEndDate={projectEndDate}
-            />
-          </TabsContent>
-
-          {/* Resources Tab */}
-          <TabsContent value="resources" className="space-y-6">
-            <ResourceWorkload projectId={projectId} />
-          </TabsContent>
-
-          {/* Changes Tab - NEW */}
+          {/* Changes Tab */}
           <TabsContent value="changes" className="space-y-6">
             {/* Baseline Comparison Section */}
             <Card>
@@ -1077,40 +1666,240 @@ Example:
 
           {/* Reports Tab */}
           <TabsContent value="reports" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">Reports</h3>
-                <p className="text-sm text-gray-500">Generate and view project reports</p>
-              </div>
-              <Button>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Generate Report
-              </Button>
+            {/* Quick Stats Header */}
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Health</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="success">{mockProject.health}</Badge>
+                      </div>
+                    </div>
+                    <CheckCircle2 className="h-8 w-8 text-emerald-200" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Progress</p>
+                      <p className="text-2xl font-bold">{mockProject.progress}%</p>
+                    </div>
+                    <BarChart3 className="h-8 w-8 text-blue-200" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Tasks</p>
+                      <p className="text-2xl font-bold">{completedTasks}/{totalTasks}</p>
+                    </div>
+                    <ListTodo className="h-8 w-8 text-purple-200" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Days Left</p>
+                      <p className="text-2xl font-bold">{daysRemaining}</p>
+                    </div>
+                    <Clock className="h-8 w-8 text-amber-200" />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Report Generation */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Generate Reports
+                    </CardTitle>
+                    <CardDescription>AI-powered project reports for stakeholders</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <Card className="cursor-pointer hover:shadow-md hover:border-emerald-300 transition-all group">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-emerald-100 group-hover:bg-emerald-200 transition-colors">
+                          <BarChart3 className="h-4 w-4 text-emerald-600" />
+                        </div>
+                        Project Status
+                      </CardTitle>
+                      <CardDescription>Health, progress, timeline overview</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-gray-500">Includes: project health, milestone status, key metrics, blockers summary</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-blue-100 group-hover:bg-blue-200 transition-colors">
+                          <TrendingUp className="h-4 w-4 text-blue-600" />
+                        </div>
+                        Sprint Performance
+                      </CardTitle>
+                      <CardDescription>Velocity and delivery metrics</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-gray-500">Includes: sprint velocity, burndown analysis, completed vs planned, team output</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md hover:border-purple-300 transition-all group">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-purple-100 group-hover:bg-purple-200 transition-colors">
+                          <GitPullRequest className="h-4 w-4 text-purple-600" />
+                        </div>
+                        Change Impact
+                      </CardTitle>
+                      <CardDescription>Scope changes and timeline effects</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-gray-500">Includes: approved changes, hours added/removed, baseline comparison, delay risks</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md hover:border-amber-300 transition-all group">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-amber-100 group-hover:bg-amber-200 transition-colors">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        </div>
+                        Risk & Issues
+                      </CardTitle>
+                      <CardDescription>Active risks and blockers</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-gray-500">Includes: risk register, active blockers, mitigation status, escalation needs</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md hover:border-indigo-300 transition-all group">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-indigo-100 group-hover:bg-indigo-200 transition-colors">
+                          <Sparkles className="h-4 w-4 text-indigo-600" />
+                        </div>
+                        Executive Summary
+                      </CardTitle>
+                      <CardDescription>AI-generated brief for leadership</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-gray-500">Includes: 1-page summary, key decisions needed, budget/timeline status, recommendations</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md hover:border-gray-300 transition-all group border-dashed">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-gray-100 group-hover:bg-gray-200 transition-colors">
+                          <Plus className="h-4 w-4 text-gray-600" />
+                        </div>
+                        Custom Report
+                      </CardTitle>
+                      <CardDescription>Generate with AI prompt</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-gray-500">Describe what you need and AI will generate a tailored report</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Project Summary Section */}
             <div className="grid gap-4 md:grid-cols-2">
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-base">Project Status Report</CardTitle>
-                  <CardDescription>Overview of current project state</CardDescription>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Sprint Overview</CardTitle>
+                  <CardDescription>Current sprint status</CardDescription>
                 </CardHeader>
+                <CardContent className="space-y-3">
+                  {activeSprint ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{activeSprint.name}</span>
+                        <Badge variant="default">Active</Badge>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm text-gray-500">
+                          <span>Progress</span>
+                          <span>{activeSprintProgress}%</span>
+                        </div>
+                        <Progress value={activeSprintProgress} className="h-2" />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                        <div className="rounded-md bg-gray-50 p-2">
+                          <p className="font-semibold">{activeSprint.tasks.length}</p>
+                          <p className="text-xs text-gray-500">Total</p>
+                        </div>
+                        <div className="rounded-md bg-emerald-50 p-2">
+                          <p className="font-semibold text-emerald-700">{activeSprintCompleted}</p>
+                          <p className="text-xs text-emerald-600">Done</p>
+                        </div>
+                        <div className="rounded-md bg-blue-50 p-2">
+                          <p className="font-semibold text-blue-700">{activeSprint.tasks.filter(t => t.status === "in_progress").length}</p>
+                          <p className="text-xs text-blue-600">In Progress</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500">No active sprint</p>
+                  )}
+                </CardContent>
               </Card>
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-base">Sprint Review</CardTitle>
-                  <CardDescription>Summary of completed sprints</CardDescription>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Timeline Status</CardTitle>
+                  <CardDescription>Delivery forecast</CardDescription>
                 </CardHeader>
-              </Card>
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-base">Resource Usage</CardTitle>
-                  <CardDescription>Time and capacity analysis</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-base">Custom Report</CardTitle>
-                  <CardDescription>Generate a custom AI report</CardDescription>
-                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Target Deadline</span>
+                    <span className="font-medium">{formatDate(mockProject.deadline)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Days Remaining</span>
+                    <Badge variant={daysRemaining < 14 ? "warning" : "secondary"}>{daysRemaining} days</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Sprints Remaining</span>
+                    <span className="font-medium">{sprintCounts.planned} planned</span>
+                  </div>
+                  <div className="rounded-md bg-gray-50 p-3">
+                    <div className="flex items-center gap-2">
+                      {daysRemaining >= 14 ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          <span className="text-sm text-emerald-700">On track for delivery</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <span className="text-sm text-amber-700">Timeline pressure - monitor closely</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
             </div>
           </TabsContent>
