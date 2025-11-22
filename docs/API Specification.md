@@ -64,10 +64,18 @@ All endpoints are **per-user scoped** (using `auth.uid()` via Supabase).
 
 ---
 
-### 2.5 Resources (Single user capacity)
+### 2.5 Resources & Workload Planning
 
-- `GET /api/resources`
-- `PATCH /api/resources/:id` (for updating capacity)
+- `GET /api/projects/:id/resources` — Get resources with workload data
+- `POST /api/projects/:id/resources` — Add a new resource
+- `PUT /api/projects/:id/resources` — Update a resource
+- `GET /api/projects/:id/resources/allocations` — Get task allocations
+- `POST /api/projects/:id/resources/allocations` — Assign task to resource
+- `DELETE /api/projects/:id/resources/allocations` — Remove task assignment
+
+### 2.6 AI Operations (Extended)
+
+- `POST /api/ai/optimize-workload` — AI workload optimization recommendations
 
 ---
 
@@ -607,7 +615,167 @@ Request Body:
 
 Response 200: updated resource JSON.
 
-8. Error Response Format
+---
+
+## 8. Resource Planning Endpoints
+
+### 8.1 GET /api/projects/:id/resources
+
+**Description:**
+Get all resources with calculated workload data for a project.
+
+**Response 200:**
+```json
+{
+  "resources": [
+    {
+      "id": "uuid",
+      "name": "John Smith",
+      "role": "backend",
+      "weekly_capacity_hours": 40,
+      "total_assigned_hours": 32,
+      "completed_hours": 12,
+      "remaining_hours": 20,
+      "utilization_percentage": 80,
+      "workload_level": "optimal",
+      "assigned_task_count": 5,
+      "sprint_breakdown": [
+        {
+          "sprint_id": "uuid",
+          "sprint_name": "Sprint 1",
+          "assigned_hours": 20,
+          "capacity_hours": 40,
+          "utilization": 50
+        }
+      ]
+    }
+  ],
+  "team_summary": {
+    "total_team_capacity": 120,
+    "total_assigned_hours": 96,
+    "team_utilization_percentage": 80,
+    "overallocated_resources": 0,
+    "underutilized_resources": 1,
+    "workload_distribution": {
+      "underloaded": 1,
+      "optimal": 2,
+      "heavy": 0,
+      "overloaded": 0
+    },
+    "bottlenecks": []
+  },
+  "sprints": [...]
+}
+```
+
+### 8.2 POST /api/projects/:id/resources
+
+**Description:**
+Create a new team resource.
+
+**Request Body:**
+```json
+{
+  "name": "Jane Doe",
+  "role": "frontend",
+  "weekly_capacity_hours": 40
+}
+```
+
+**Response 201:**
+```json
+{
+  "resource": {
+    "id": "uuid",
+    "name": "Jane Doe",
+    "role": "frontend",
+    "weekly_capacity_hours": 40,
+    "created_at": "2025-06-01T10:00:00Z"
+  }
+}
+```
+
+### 8.3 POST /api/projects/:id/resources/allocations
+
+**Description:**
+Assign a task to a resource.
+
+**Request Body:**
+```json
+{
+  "task_id": "uuid",
+  "resource_id": "uuid",
+  "assigned_hours": 8
+}
+```
+
+**Response 201:**
+```json
+{
+  "assignment": {
+    "id": "uuid",
+    "task_id": "uuid",
+    "resource_id": "uuid",
+    "assigned_hours": 8,
+    "created_at": "2025-06-01T10:00:00Z"
+  }
+}
+```
+
+### 8.4 POST /api/ai/optimize-workload
+
+**Description:**
+Get AI-powered workload optimization recommendations.
+
+**Request Body:**
+```json
+{
+  "projectId": "uuid"
+}
+```
+
+**Response 200:**
+```json
+{
+  "optimization": {
+    "summary": "Team is currently at 85% utilization with 1 overloaded resource...",
+    "current_issues": [
+      {
+        "issue": "John Smith is overloaded by 20 hours",
+        "severity": "high",
+        "affected_resources": ["John Smith"]
+      }
+    ],
+    "recommended_changes": [
+      {
+        "task_id": "uuid",
+        "task_title": "Build dashboard UI",
+        "current_assignee": "John Smith",
+        "recommended_assignee": "Jane Doe",
+        "reason": "Jane has 16 hours available capacity",
+        "hours_to_reassign": 12
+      }
+    ],
+    "sprint_adjustments": [],
+    "projected_improvement": {
+      "before_utilization": 110,
+      "after_utilization": 85,
+      "overload_reduction": 1,
+      "timeline_impact_days": 0
+    }
+  },
+  "current_state": {
+    "resources": [...],
+    "sprints": [...],
+    "unassigned_tasks": 3,
+    "team_summary": {...}
+  }
+}
+```
+
+---
+
+## 9. Error Response Format
 
 Example error:
 

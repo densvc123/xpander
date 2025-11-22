@@ -49,12 +49,14 @@ import {
   X,
   Check,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Users
 } from "lucide-react"
 import Link from "next/link"
 import { formatDate } from "@/lib/utils"
 import { GanttChart } from "@/components/gantt/gantt-chart"
 import { mockGanttSprints, projectStartDate, projectEndDate } from "@/components/gantt/gantt-data"
+import { ResourceWorkload } from "@/components/resources/resource-workload"
 import type {
   ChangeRequest,
   ChangeRequestAnalysis,
@@ -380,11 +382,12 @@ export default function ProjectDetailPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-8">
+            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-9">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="requirements">Requirements</TabsTrigger>
               <TabsTrigger value="tasks">Tasks</TabsTrigger>
               <TabsTrigger value="sprints">Sprints</TabsTrigger>
+              <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="gantt">Gantt</TabsTrigger>
               <TabsTrigger value="changes">Changes</TabsTrigger>
               <TabsTrigger value="advisor">AI Advisor</TabsTrigger>
@@ -437,6 +440,10 @@ export default function ProjectDetailPage() {
                   <Button variant="outline" onClick={() => setActiveTab("tasks")}>
                     <ListTodo className="h-4 w-4 mr-2" />
                     View Tasks
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab("resources")}>
+                    <Users className="h-4 w-4 mr-2" />
+                    Team Resources
                   </Button>
                   <Button variant="outline" onClick={() => setActiveTab("changes")}>
                     <GitPullRequest className="h-4 w-4 mr-2" />
@@ -584,6 +591,11 @@ Example:
               projectStartDate={projectStartDate}
               projectEndDate={projectEndDate}
             />
+          </TabsContent>
+
+          {/* Resources Tab */}
+          <TabsContent value="resources" className="space-y-6">
+            <ResourceWorkload projectId={projectId} />
           </TabsContent>
 
           {/* Changes Tab - NEW */}
