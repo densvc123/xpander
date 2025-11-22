@@ -343,5 +343,43 @@ This is enough for smooth dashboard queries and AI context-building.
 
 ---
 
-✅ **Document 6 complete.**  
-Reply **Next** and I’ll send:
+---
+
+## 7. Resource Planning Extensions
+
+The following types support the Resource Planning feature:
+
+### 7.1 Resource Planning Types
+
+```typescript
+// Role types for team members
+type ResourceRole = 'pm' | 'backend' | 'frontend' | 'fullstack' | 'qa' | 'design' | 'devops' | 'other'
+
+// Status of resource allocation
+type AllocationStatus = 'available' | 'allocated' | 'overallocated' | 'on_leave'
+
+// Workload categorization
+type WorkloadLevel = 'underloaded' | 'optimal' | 'heavy' | 'overloaded'
+```
+
+### 7.2 Resource Availability Table (Optional)
+
+For tracking resource availability exceptions:
+
+```sql
+create table if not exists public.resource_availability (
+  id uuid primary key default gen_random_uuid(),
+  resource_id uuid not null references public.resources(id) on delete cascade,
+  date date not null,
+  available_hours numeric(10,2) not null default 0,
+  reason text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_resource_availability_resource_id on public.resource_availability(resource_id);
+create index if not exists idx_resource_availability_date on public.resource_availability(date);
+```
+
+---
+
+✅ **Document complete.**

@@ -23,6 +23,11 @@ export type ChangeStatus = 'open' | 'analyzed' | 'approved' | 'rejected' | 'impl
 export type ChangeHistoryAction = 'created' | 'analyzed' | 'approved' | 'rejected' | 'implemented' | 'baseline_created'
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 
+// Resource Planning Types
+export type ResourceRole = 'pm' | 'backend' | 'frontend' | 'fullstack' | 'qa' | 'design' | 'devops' | 'other'
+export type AllocationStatus = 'available' | 'allocated' | 'overallocated' | 'on_leave'
+export type WorkloadLevel = 'underloaded' | 'optimal' | 'heavy' | 'overloaded'
+
 export interface Database {
   public: {
     Tables: {
@@ -530,6 +535,29 @@ export interface Database {
           metadata?: Json
         }
       }
+      // Resource Planning Tables
+      resource_availability: {
+        Row: {
+          id: string
+          resource_id: string
+          date: string
+          available_hours: number
+          reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          resource_id: string
+          date: string
+          available_hours: number
+          reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          available_hours?: number
+          reason?: string | null
+        }
+      }
     }
   }
 }
@@ -563,6 +591,9 @@ export type ChangeHistory = Tables<'change_history'>
 export interface ChangeRequestWithAnalysis extends ChangeRequest {
   change_request_analysis?: ChangeRequestAnalysis[]
 }
+
+// Resource Planning convenience export
+export type ResourceAvailability = Tables<'resource_availability'>
 
 // AI Analysis Response Types
 export interface ChangeImpactNewTask {
@@ -605,4 +636,93 @@ export interface BaselineComparison {
   baseline_sprint_count: number
   new_sprint_count: number
   sprint_overload: string[]
+}
+
+// Resource Planning Interfaces
+export interface ResourceAllocation {
+  resource_id: string
+  resource_name: string
+  role: ResourceRole
+  sprint_id: string | null
+  sprint_name: string | null
+  allocated_hours: number
+  capacity_hours: number
+  utilization_percentage: number
+  status: AllocationStatus
+  tasks: {
+    task_id: string
+    task_title: string
+    allocated_hours: number
+  }[]
+}
+
+export interface ResourceWorkload {
+  resource_id: string
+  resource_name: string
+  role: ResourceRole
+  weekly_capacity: number
+  total_assigned_hours: number
+  completed_hours: number
+  remaining_hours: number
+  utilization_percentage: number
+  workload_level: WorkloadLevel
+  overdue_tasks: number
+  upcoming_deadlines: number
+  sprint_breakdown: {
+    sprint_id: string
+    sprint_name: string
+    assigned_hours: number
+    capacity_hours: number
+    utilization: number
+  }[]
+}
+
+export interface TeamWorkloadSummary {
+  total_team_capacity: number
+  total_assigned_hours: number
+  team_utilization_percentage: number
+  overallocated_resources: number
+  underutilized_resources: number
+  workload_distribution: {
+    underloaded: number
+    optimal: number
+    heavy: number
+    overloaded: number
+  }
+  bottlenecks: {
+    resource_name: string
+    overload_hours: number
+    affected_tasks: string[]
+  }[]
+  recommendations: string[]
+}
+
+export interface WorkloadOptimizationResult {
+  summary: string
+  current_issues: {
+    issue: string
+    severity: 'low' | 'medium' | 'high' | 'critical'
+    affected_resources: string[]
+  }[]
+  recommended_changes: {
+    task_id: string
+    task_title: string
+    current_assignee: string | null
+    recommended_assignee: string
+    reason: string
+    hours_to_reassign: number
+  }[]
+  sprint_adjustments: {
+    sprint_id: string
+    sprint_name: string
+    current_load: number
+    recommended_load: number
+    tasks_to_move: string[]
+  }[]
+  projected_improvement: {
+    before_utilization: number
+    after_utilization: number
+    overload_reduction: number
+    timeline_impact_days: number
+  }
 }
