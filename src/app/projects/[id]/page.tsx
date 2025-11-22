@@ -116,6 +116,9 @@ export default function ProjectDetailPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [advisorInput, setAdvisorInput] = useState("")
   const [messages, setMessages] = useState<Message[]>(mockMessages)
+  const [selectedTask, setSelectedTask] = useState<typeof mockTasks[0] | null>(null)
+  const [selectedSprint, setSelectedSprint] = useState<typeof mockSprints[0] | null>(null)
+  const [selectedReportType, setSelectedReportType] = useState<string | null>(null)
 
   // Change Management State
   const [changeRequests, setChangeRequests] = useState<ChangeRequestWithAnalysis[]>([])
@@ -507,37 +510,90 @@ Example:
                 Generate Tasks
               </Button>
             </div>
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y">
-                  {mockTasks.map((task) => (
-                    <div key={task.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-1 rounded ${
-                          task.status === "completed" ? "bg-emerald-100" :
-                          task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
-                        }`}>
-                          {task.status === "completed" ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          ) : task.status === "in_progress" ? (
-                            <Play className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <Clock className="h-4 w-4 text-gray-400" />
-                          )}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">All Tasks</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[400px]">
+                    <div className="divide-y">
+                      {mockTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors ${selectedTask?.id === task.id ? "bg-emerald-50" : ""}`}
+                          onClick={() => setSelectedTask(task)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`p-1 rounded ${
+                              task.status === "completed" ? "bg-emerald-100" :
+                              task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
+                            }`}>
+                              {task.status === "completed" ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              ) : task.status === "in_progress" ? (
+                                <Play className="h-4 w-4 text-blue-600" />
+                              ) : (
+                                <Clock className="h-4 w-4 text-gray-400" />
+                              )}
+                            </div>
+                            <div>
+                              <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
+                                {task.title}
+                              </p>
+                              <p className="text-sm text-gray-500">{task.type} • {task.estimatedHours}h</p>
+                            </div>
+                          </div>
+                          <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
                         </div>
-                        <div>
-                          <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
-                            {task.title}
-                          </p>
-                          <p className="text-sm text-gray-500">{task.type} • {task.estimatedHours}h</p>
-                        </div>
-                      </div>
-                      <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {selectedTask ? selectedTask.title : "Select a Task"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {selectedTask ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Status</p>
+                        <Badge variant={
+                          selectedTask.status === "completed" ? "success" :
+                          selectedTask.status === "in_progress" ? "default" : "secondary"
+                        }>
+                          {selectedTask.status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Type</p>
+                        <p className="text-sm">{selectedTask.type}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Estimated Hours</p>
+                        <p className="text-sm">{selectedTask.estimatedHours}h</p>
+                      </div>
+                      <div className="pt-4 border-t">
+                        <Button variant="outline" className="w-full">
+                          <Play className="h-4 w-4 mr-2" />
+                          {selectedTask.status === "pending" ? "Start Task" :
+                           selectedTask.status === "in_progress" ? "Mark Complete" : "Reopen Task"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <ListTodo className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                      <p>Select a task to view details</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Sprints Tab */}
@@ -552,28 +608,77 @@ Example:
                 Plan Sprints
               </Button>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              {mockSprints.map((sprint) => (
-                <Card key={sprint.id} className={sprint.status === "active" ? "ring-2 ring-emerald-500" : ""}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{sprint.name}</CardTitle>
-                      <Badge variant={
-                        sprint.status === "completed" ? "success" :
-                        sprint.status === "active" ? "default" : "secondary"
-                      }>
-                        {sprint.status}
-                      </Badge>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-4">
+                {mockSprints.map((sprint) => (
+                  <Card
+                    key={sprint.id}
+                    className={`cursor-pointer hover:shadow-md transition-all ${
+                      sprint.status === "active" ? "ring-2 ring-emerald-500" : ""
+                    } ${selectedSprint?.id === sprint.id ? "bg-emerald-50" : ""}`}
+                    onClick={() => setSelectedSprint(sprint)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">{sprint.name}</CardTitle>
+                        <Badge variant={
+                          sprint.status === "completed" ? "success" :
+                          sprint.status === "active" ? "default" : "secondary"
+                        }>
+                          {sprint.status}
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-500">{sprint.tasksCount} tasks</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {selectedSprint ? selectedSprint.name : "Select a Sprint"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {selectedSprint ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Status</p>
+                        <Badge variant={
+                          selectedSprint.status === "completed" ? "success" :
+                          selectedSprint.status === "active" ? "default" : "secondary"
+                        }>
+                          {selectedSprint.status}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Duration</p>
+                        <p className="text-sm">{formatDate(selectedSprint.startDate)} - {formatDate(selectedSprint.endDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Tasks</p>
+                        <p className="text-sm">{selectedSprint.tasksCount} tasks assigned</p>
+                      </div>
+                      <div className="pt-4 border-t">
+                        <Button variant="outline" className="w-full">
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          View Sprint Details
+                        </Button>
+                      </div>
                     </div>
-                    <CardDescription>
-                      {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-500">{sprint.tasksCount} tasks</p>
-                  </CardContent>
-                </Card>
-              ))}
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                      <p>Select a sprint to view details</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
@@ -1070,37 +1175,88 @@ Example:
                 <h3 className="text-lg font-semibold">Reports</h3>
                 <p className="text-sm text-gray-500">Generate and view project reports</p>
               </div>
-              <Button>
+              <Button disabled={!selectedReportType}>
                 <Sparkles className="h-4 w-4 mr-2" />
                 Generate Report
               </Button>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <Card
+                className={`cursor-pointer hover:shadow-md transition-all ${selectedReportType === "project_status" ? "ring-2 ring-emerald-500 bg-emerald-50" : ""}`}
+                onClick={() => setSelectedReportType("project_status")}
+              >
                 <CardHeader>
                   <CardTitle className="text-base">Project Status Report</CardTitle>
                   <CardDescription>Overview of current project state</CardDescription>
                 </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-500">Includes progress, health metrics, and key milestones</p>
+                </CardContent>
               </Card>
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <Card
+                className={`cursor-pointer hover:shadow-md transition-all ${selectedReportType === "sprint_review" ? "ring-2 ring-emerald-500 bg-emerald-50" : ""}`}
+                onClick={() => setSelectedReportType("sprint_review")}
+              >
                 <CardHeader>
                   <CardTitle className="text-base">Sprint Review</CardTitle>
                   <CardDescription>Summary of completed sprints</CardDescription>
                 </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-500">Velocity, burndown, and sprint retrospective data</p>
+                </CardContent>
               </Card>
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <Card
+                className={`cursor-pointer hover:shadow-md transition-all ${selectedReportType === "resource_usage" ? "ring-2 ring-emerald-500 bg-emerald-50" : ""}`}
+                onClick={() => setSelectedReportType("resource_usage")}
+              >
                 <CardHeader>
                   <CardTitle className="text-base">Resource Usage</CardTitle>
                   <CardDescription>Time and capacity analysis</CardDescription>
                 </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-500">Team allocation, hours logged, and capacity planning</p>
+                </CardContent>
               </Card>
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <Card
+                className={`cursor-pointer hover:shadow-md transition-all ${selectedReportType === "custom" ? "ring-2 ring-emerald-500 bg-emerald-50" : ""}`}
+                onClick={() => setSelectedReportType("custom")}
+              >
                 <CardHeader>
                   <CardTitle className="text-base">Custom Report</CardTitle>
                   <CardDescription>Generate a custom AI report</CardDescription>
                 </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-500">AI-powered custom analysis based on your needs</p>
+                </CardContent>
               </Card>
             </div>
+            {selectedReportType && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    {selectedReportType === "project_status" && "Project Status Report"}
+                    {selectedReportType === "sprint_review" && "Sprint Review Report"}
+                    {selectedReportType === "resource_usage" && "Resource Usage Report"}
+                    {selectedReportType === "custom" && "Custom Report"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Click &quot;Generate Report&quot; to create this report with AI-powered insights.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setSelectedReportType(null)}>
+                      Cancel
+                    </Button>
+                    <Button>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate Now
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
