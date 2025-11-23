@@ -60,7 +60,7 @@ export interface CreateProjectRiskInput {
   due_date?: string
 }
 
-export interface UpdateProjectRiskInput extends Partial<CreateProjectRiskInput> {}
+export type UpdateProjectRiskInput = Partial<CreateProjectRiskInput>
 
 export interface CreateProjectDecisionInput {
   title: string
@@ -71,7 +71,7 @@ export interface CreateProjectDecisionInput {
   rationale?: string
 }
 
-export interface UpdateProjectDecisionInput extends Partial<CreateProjectDecisionInput> {}
+export type UpdateProjectDecisionInput = Partial<CreateProjectDecisionInput>
 
 export interface CreateProjectMilestoneInput {
   name: string
@@ -82,4 +82,4 @@ export interface CreateProjectMilestoneInput {
   owner?: string
 }
 
-export interface UpdateProjectMilestoneInput extends Partial<CreateProjectMilestoneInput> {}
+export type UpdateProjectMilestoneInput = Partial<CreateProjectMilestoneInput>

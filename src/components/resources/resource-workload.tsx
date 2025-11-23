@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -31,12 +30,7 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  TrendingUp,
-  TrendingDown,
-  BarChart3,
-  Calendar,
-  Zap
+  Clock
 } from "lucide-react"
 import type { ResourceRole, WorkloadLevel } from "@/types/database"
 
@@ -78,14 +72,6 @@ interface TeamSummary {
   }[]
 }
 
-interface Sprint {
-  id: string
-  name: string
-  start_date: string
-  end_date: string
-  status: string
-}
-
 interface ResourceWorkloadProps {
   projectId: string
 }
@@ -93,7 +79,6 @@ interface ResourceWorkloadProps {
 export function ResourceWorkload({ projectId }: ResourceWorkloadProps) {
   const [resources, setResources] = useState<ResourceWithWorkload[]>([])
   const [teamSummary, setTeamSummary] = useState<TeamSummary | null>(null)
-  const [sprints, setSprints] = useState<Sprint[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -118,7 +103,6 @@ export function ResourceWorkload({ projectId }: ResourceWorkloadProps) {
         const data = await res.json()
         setResources(data.resources || [])
         setTeamSummary(data.team_summary || null)
-        setSprints(data.sprints || [])
       }
     } catch (error) {
       console.error("Error fetching resources:", error)

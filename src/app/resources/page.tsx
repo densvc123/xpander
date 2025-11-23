@@ -1,13 +1,12 @@
 "use client"
 
-import { useMemo, useState, useCallback } from "react"
+import { useMemo, useState } from "react"
 import { format, subWeeks, startOfWeek, endOfWeek, eachWeekOfInterval, eachMonthOfInterval, subMonths, startOfMonth, endOfMonth } from "date-fns"
 import Link from "next/link"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -147,9 +146,6 @@ const CHART_COLORS = {
 }
 
 const TEAM_MEMBERS = ["Ava Chen", "Leo Park", "Maya Singh", "Noah Wright", "Emma Davis"] as const
-const PROJECT_KEYS = ["XPANDER MVP", "Mobile App", "API Integration", "Docs Portal"] as const
-type TeamMember = typeof TEAM_MEMBERS[number]
-type ProjectKey = typeof PROJECT_KEYS[number]
 
 // Custom tooltip component for better styling
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
@@ -209,9 +205,6 @@ const aiSuggestions = {
 
 // Helper to generate workload data for a date range
 const generateWorkloadData = (startDate: Date, endDate: Date, period: "weekly" | "monthly") => {
-  const teamMembers = ["Ava Chen", "Leo Park", "Maya Singh", "Noah Wright", "Emma Davis"]
-  const projects = ["XPANDER MVP", "Mobile App", "API Integration", "Docs Portal"]
-
   const intervals = period === "weekly"
     ? eachWeekOfInterval({ start: startDate, end: endDate })
     : eachMonthOfInterval({ start: startDate, end: endDate })

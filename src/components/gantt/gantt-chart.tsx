@@ -80,10 +80,6 @@ const isWeekend = (date: Date): boolean => {
   return day === 0 || day === 6
 }
 
-const isSameDay = (date1: Date, date2: Date): boolean => {
-  return date1.toDateString() === date2.toDateString()
-}
-
 export function GanttChart({ sprints, projectStartDate, projectEndDate }: GanttChartProps) {
   const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set(sprints.map(s => s.id)))
   const [viewMode, setViewMode] = useState<ViewMode>("week")

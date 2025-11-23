@@ -62,8 +62,7 @@ import type {
   ChangeHistory,
   ChangeType,
   ChangePriority,
-  ChangeArea,
-  BaselineComparison
+  ChangeArea
 } from "@/types/database"
 import type {
   ProjectRisk,
@@ -204,7 +203,7 @@ export default function ProjectDetailPage() {
   const [risks, setRisks] = useState<ProjectRisk[]>([])
   const [decisions, setDecisions] = useState<ProjectDecision[]>([])
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([])
-  const [isLoadingGovernance, setIsLoadingGovernance] = useState(false)
+  const [, setIsLoadingGovernance] = useState(false)
 
   const totalTasks = sprints.reduce((sum, sprint) => sum + sprint.tasks.length, 0)
   const completedTasks = sprints.reduce(
@@ -219,7 +218,6 @@ export default function ProjectDetailPage() {
   const totalCapacityHours = mockTeamMembers.reduce((sum, member) => sum + member.capacityHours, 0)
   const totalWorkloadHours = mockTeamMembers.reduce((sum, member) => sum + member.workloadHours, 0)
   const utilization = totalCapacityHours > 0 ? Math.min(100, Math.round((totalWorkloadHours / totalCapacityHours) * 100)) : 0
-  const overloadedMembers = mockTeamMembers.filter((member) => member.workloadHours > member.capacityHours)
   const projectUtilization = utilization
   const daysRemaining = getDaysUntil(mockProject.deadline)
   const projectTeam = mockTeamMembers

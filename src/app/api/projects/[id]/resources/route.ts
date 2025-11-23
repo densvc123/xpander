@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { ResourceRole } from '@/types/database'
 
 // GET /api/projects/[id]/resources - Get project resources with workload data
 export async function GET(
@@ -216,6 +215,18 @@ export async function PUT(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Verify user owns the project
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
     const body = await request.json()

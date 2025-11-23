@@ -225,11 +225,35 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Verify user owns the project
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
     const body = await request.json()
     const { task_id, resource_id } = body
 
     if (!task_id || !resource_id) {
       return NextResponse.json({ error: 'task_id and resource_id are required' }, { status: 400 })
+    }
+
+    // Ensure task belongs to the project before deleting assignment
+    const { data: task } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('id', task_id)
+      .eq('project_id', id)
+      .single()
+
+    if (!task) {
+      return NextResponse.json({ error: 'Task not found in project' }, { status: 404 })
     }
 
     const { error } = await supabase
