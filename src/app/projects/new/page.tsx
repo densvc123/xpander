@@ -11,6 +11,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn, formatDate } from "@/lib/utils"
 import {
   ArrowLeft,
@@ -36,6 +43,11 @@ import type {
 
 type StepId = "requirements" | "analysis" | "backlog" | "plan"
 
+type Audience = "internal_team" | "customers" | "both" | "other"
+type InitiativeSize = "small" | "medium" | "large"
+type TaskScope = "must_have" | "nice_to_have" | "later"
+type TeamPreset = "solo" | "small" | "large"
+
 type RequirementInput = { id: string; input_type: InputType; content: string }
 type AnalysisRisk = { title: string; description: string; severity: string; mitigation: string }
 type AnalysisDependency = { name: string; type: string; description: string }
@@ -60,6 +72,7 @@ type TaskItem = {
   priority: number
   sprint_id?: string
   status: TaskStatus
+  scope: TaskScope
 }
 
 type SprintItem = {
@@ -115,45 +128,48 @@ const fallbackAnalysis: AnalysisPayload = {
   complexity_score: 6,
   effort_estimate_hours: 52,
   key_features: [
-    "Requirements capture with validation",
-    "AI analysis mapped to ai_project_analysis",
-    "Sprint/task planning aligned to schema",
-    "Resource allocation and utilization view"
+    "Guided requirements capture",
+    "AI-generated project brief (summary, risks, effort)",
+    "Automatic sprint and task planning",
+    "Resource workload and utilization overview"
   ],
   suggested_phases: [
-    { name: "Foundation", description: "Project metadata + requirements capture mapped to projects and project_inputs.", estimated_hours: 14 },
-    { name: "Planning", description: "AI analysis + task breakdown mapped to ai_project_analysis and tasks.", estimated_hours: 20 },
-    { name: "Execution Setup", description: "Sprint timelines, resource allocation, and assignments.", estimated_hours: 18 }
+    { name: "Foundation", description: "Capture project basics, goals, and requirements.", estimated_hours: 14 },
+    { name: "Planning", description: "Use AI to analyze the work and break it into tasks.", estimated_hours: 20 },
+    { name: "Execution Setup", description: "Shape sprints, timeline, and team allocation.", estimated_hours: 18 }
   ]
 }
 
 const fallbackTasks: TaskItem[] = [
   {
     id: "task-setup-schema",
-    title: "Create Supabase schema for projects/sprints/tasks",
-    description: "Ensure data model and permissions match the wizard flow.",
+    title: "Set up core project data",
+    description: "Make sure your project, sprint, and task structure matches how you plan and track work.",
     task_type: "database",
     estimated_hours: 4,
     priority: 1,
-    status: "pending"
+    status: "pending",
+    scope: "must_have"
   },
   {
     id: "task-requirements-ui",
     title: "Build requirements capture UI",
-    description: "Inputs for name, description, dates, and PRD text mapped to project_inputs.",
+    description: "Inputs for project name, description, key dates, and problem statement.",
     task_type: "frontend",
     estimated_hours: 6,
     priority: 1,
-    status: "pending"
+    status: "pending",
+    scope: "must_have"
   },
   {
     id: "task-ai-analysis",
     title: "AI analysis call + parsing",
-    description: "Call /api/ai/analyze and map JSON to ai_project_analysis fields.",
+    description: "Call the AI analysis endpoint and turn the response into a clear project brief.",
     task_type: "backend",
     estimated_hours: 6,
     priority: 2,
-    status: "pending"
+    status: "pending",
+    scope: "must_have"
   },
   {
     id: "task-backlog-breakdown",
@@ -162,7 +178,8 @@ const fallbackTasks: TaskItem[] = [
     task_type: "backend",
     estimated_hours: 8,
     priority: 2,
-    status: "pending"
+    status: "pending",
+    scope: "nice_to_have"
   },
   {
     id: "task-sprint-plan",
@@ -171,7 +188,8 @@ const fallbackTasks: TaskItem[] = [
     task_type: "backend",
     estimated_hours: 6,
     priority: 2,
-    status: "pending"
+    status: "pending",
+    scope: "nice_to_have"
   },
   {
     id: "task-resource-alloc",
@@ -180,7 +198,8 @@ const fallbackTasks: TaskItem[] = [
     task_type: "devops",
     estimated_hours: 5,
     priority: 3,
-    status: "pending"
+    status: "pending",
+    scope: "later"
   }
 ]
 
@@ -203,6 +222,38 @@ const getSeverityColor = (severity: string) => {
   return "text-emerald-600 bg-emerald-50"
 }
 
+const getScopeLabel = (scope: TaskScope) => {
+  switch (scope) {
+    case "must_have":
+      return "Must-have"
+    case "nice_to_have":
+      return "Nice-to-have"
+    case "later":
+      return "Later"
+    default:
+      return "Unspecified"
+  }
+}
+
+const getScopeBadgeClass = (scope: TaskScope) => {
+  switch (scope) {
+    case "must_have":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200"
+    case "nice_to_have":
+      return "bg-blue-50 text-blue-700 border-blue-200"
+    case "later":
+      return "bg-gray-50 text-gray-700 border-gray-200"
+    default:
+      return ""
+  }
+}
+
+const nextScope = (scope: TaskScope): TaskScope => {
+  if (scope === "must_have") return "nice_to_have"
+  if (scope === "nice_to_have") return "later"
+  return "must_have"
+}
+
 export default function NewProjectWizard() {
   const router = useRouter()
   const [activeStep, setActiveStep] = useState<StepId>("requirements")
@@ -221,15 +272,38 @@ export default function NewProjectWizard() {
     status: "planning",
     health: "healthy"
   })
+  const [projectMeta, setProjectMeta] = useState<{
+    goal: string
+    audience: Audience
+    successLaunchByDate: boolean
+    successUsage: boolean
+    successRevenue: boolean
+    successSatisfaction: boolean
+    customSuccess: string
+    constraints: string
+    initiativeSize: InitiativeSize
+  }>({
+    goal: "",
+    audience: "internal_team",
+    successLaunchByDate: true,
+    successUsage: false,
+    successRevenue: false,
+    successSatisfaction: false,
+    customSuccess: "",
+    constraints: "",
+    initiativeSize: "medium"
+  })
   const [requirementsInput, setRequirementsInput] = useState<RequirementInput>({
     id: generateId(),
     input_type: "prd_text",
     content: ""
   })
   const [analysis, setAnalysis] = useState<AnalysisPayload | null>(null)
+  const [analysisRefinement, setAnalysisRefinement] = useState("")
+  const [analysisIsBaseline, setAnalysisIsBaseline] = useState(false)
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [sprints, setSprints] = useState<SprintItem[]>([])
-  const [resources] = useState<ResourceItem[]>(defaultResources)
+  const [resources, setResources] = useState<ResourceItem[]>(defaultResources)
   const [assignments, setAssignments] = useState<AssignmentItem[]>([])
   const [timelineSummary, setTimelineSummary] = useState<string>("Run sprint planning to see the timeline.")
   const [bufferPercentage, setBufferPercentage] = useState<number>(15)
@@ -240,6 +314,9 @@ export default function NewProjectWizard() {
     saving: false
   })
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [sprintLengthWeeks, setSprintLengthWeeks] = useState(2)
+  const [pace, setPace] = useState<"conservative" | "normal" | "aggressive">("normal")
+  const [teamPreset, setTeamPreset] = useState<TeamPreset>("small")
 
   const currentStepIndex = steps.findIndex((s) => s.id === activeStep)
   const totalHours = useMemo(() => tasks.reduce((sum, task) => sum + (task.estimated_hours || 0), 0), [tasks])
@@ -264,8 +341,45 @@ export default function NewProjectWizard() {
     })
   }, [sprints, tasks])
 
+  const topEffortArea = useMemo(() => {
+    if (!tasks.length) return ""
+    const totals: Record<TaskType, number> = {
+      backend: 0,
+      frontend: 0,
+      api: 0,
+      database: 0,
+      qa: 0,
+      design: 0,
+      devops: 0,
+      other: 0
+    }
+    tasks.forEach((task) => {
+      totals[task.task_type] += task.estimated_hours || 0
+    })
+    const [topType] = Object.entries(totals).sort((a, b) => b[1] - a[1])[0] || []
+    return topType || ""
+  }, [tasks])
+
+  const overallUtilization = useMemo(() => {
+    if (!resourceLoad.length) return 0
+    const sum = resourceLoad.reduce((acc, r) => acc + r.utilization, 0)
+    return Math.round(sum / resourceLoad.length)
+  }, [resourceLoad])
+
+  const timelineRisk = overallUtilization > 100 ? "High" : overallUtilization >= 80 ? "Medium" : overallUtilization > 0 ? "Low" : "Unknown"
+
+  const estimatedFinishDate = useMemo(() => {
+    if (sprints.length) {
+      const sorted = [...sprints].sort(
+        (a, b) => new Date(a.end_date).getTime() - new Date(b.end_date).getTime()
+      )
+      return sorted[sorted.length - 1]?.end_date || ""
+    }
+    return project.deadline || ""
+  }, [sprints, project.deadline])
+
   const canProceed = (step: StepId) => {
-    if (step === "requirements") return Boolean(project.name && requirementsInput.content)
+    if (step === "requirements") return Boolean(project.name && requirementsInput.content && projectMeta.goal)
     if (step === "analysis") return Boolean(analysis)
     if (step === "backlog") return tasks.length > 0 && sprints.length > 0
     return true
@@ -283,7 +397,7 @@ export default function NewProjectWizard() {
     }
   }
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (refinementNote?: string) => {
     setIsLoading((prev) => ({ ...prev, analysis: true }))
     setStatusMessage(null)
     try {
@@ -291,7 +405,7 @@ export default function NewProjectWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          requirements: requirementsInput.content,
+          requirements: requirementsInput.content + (refinementNote ? `\n\nRefinement note from user:\n${refinementNote}` : ""),
           projectName: project.name,
           deadline: project.deadline
         })
@@ -369,8 +483,10 @@ export default function NewProjectWizard() {
     }
   }
 
+  const sprintLengthDays = sprintLengthWeeks * 7
+
   const buildFallbackSprints = (start: string) => {
-    const sprintLength = 14
+    const sprintLength = sprintLengthDays || 14
     return [
       {
         id: "sprint-1",
@@ -397,7 +513,10 @@ export default function NewProjectWizard() {
     setIsLoading((prev) => ({ ...prev, plan: true }))
     setStatusMessage(null)
     const start = project.start_date || toISODate(new Date())
-    const sprintLength = 14
+    const sprintLength = sprintLengthDays || 14
+    const rawWeeklyCapacity = resources.reduce((sum, r) => sum + r.weekly_capacity_hours, 0)
+    const paceMultiplier = pace === "conservative" ? 0.8 : pace === "aggressive" ? 1.2 : 1
+    const effectiveWeeklyCapacity = Math.round(rawWeeklyCapacity * paceMultiplier)
     try {
       const response = await fetch("/api/ai/sprint-plan", {
         method: "POST",
@@ -407,7 +526,7 @@ export default function NewProjectWizard() {
           startDate: start,
           deadline: project.deadline,
           sprintLength,
-          weeklyCapacity: resources.reduce((sum, r) => sum + r.weekly_capacity_hours, 0)
+          weeklyCapacity: effectiveWeeklyCapacity
         })
       })
 
@@ -493,7 +612,7 @@ export default function NewProjectWizard() {
     })
 
     setAssignments(newAssignments)
-    setStatusMessage("Resources auto-allocated; ready to persist to task_assignments.")
+    setStatusMessage("Resources auto-allocated; you can review or adjust before saving.")
   }
 
   const saveProject = async () => {
@@ -519,7 +638,7 @@ export default function NewProjectWizard() {
       router.push("/projects")
     } catch (error) {
       console.error("Save error:", error)
-      setStatusMessage("Project save failed. Data prepared for Supabase insert remains in memory.")
+      setStatusMessage("Project save failed. Your plan is still on this page; please try again.")
     } finally {
       setIsLoading((prev) => ({ ...prev, saving: false }))
     }
@@ -630,6 +749,115 @@ export default function NewProjectWizard() {
                 </div>
               </div>
 
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <Label htmlFor="goal">Goal (3–6 month outcome)</Label>
+                  <Textarea
+                    id="goal"
+                    rows={3}
+                    placeholder="e.g. Launch an AI project planning wizard that helps PMs go from idea to plan in under 10 minutes."
+                    value={projectMeta.goal}
+                    onChange={(e) => setProjectMeta({ ...projectMeta, goal: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Who is this for?</Label>
+                    <Select
+                      value={projectMeta.audience}
+                      onValueChange={(value) => setProjectMeta({ ...projectMeta, audience: value as Audience })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select primary audience" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="internal_team">Internal team</SelectItem>
+                        <SelectItem value="customers">Customers</SelectItem>
+                        <SelectItem value="both">Both internal & customers</SelectItem>
+                        <SelectItem value="other">Other / not sure yet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>How big is this initiative?</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {(["small", "medium", "large"] as InitiativeSize[]).map((size) => (
+                        <Button
+                          key={size}
+                          type="button"
+                          size="sm"
+                          variant={projectMeta.initiativeSize === size ? "default" : "outline"}
+                          onClick={() => setProjectMeta({ ...projectMeta, initiativeSize: size })}
+                        >
+                          {size === "small" && "Small (1–2 weeks)"}
+                          {size === "medium" && "Medium (3–6 weeks)"}
+                          {size === "large" && "Large (6+ weeks)"}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <Label>How will you measure success?</Label>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                        checked={projectMeta.successLaunchByDate}
+                        onChange={(e) => setProjectMeta({ ...projectMeta, successLaunchByDate: e.target.checked })}
+                      />
+                      <span>Launch by a specific date</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                        checked={projectMeta.successUsage}
+                        onChange={(e) => setProjectMeta({ ...projectMeta, successUsage: e.target.checked })}
+                      />
+                      <span>Usage / adoption (e.g. weekly active users)</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                        checked={projectMeta.successRevenue}
+                        onChange={(e) => setProjectMeta({ ...projectMeta, successRevenue: e.target.checked })}
+                      />
+                      <span>Revenue or cost savings</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                        checked={projectMeta.successSatisfaction}
+                        onChange={(e) => setProjectMeta({ ...projectMeta, successSatisfaction: e.target.checked })}
+                      />
+                      <span>Customer or stakeholder satisfaction</span>
+                    </label>
+                    <Textarea
+                      rows={2}
+                      placeholder="Any other signals of success? (optional)"
+                      value={projectMeta.customSuccess}
+                      onChange={(e) => setProjectMeta({ ...projectMeta, customSuccess: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <Label>Constraints & non‑negotiables</Label>
+                  <Textarea
+                    rows={6}
+                    placeholder="List any hard constraints (tech stack, budget, compliance, dependencies, etc.)."
+                    value={projectMeta.constraints}
+                    onChange={(e) => setProjectMeta({ ...projectMeta, constraints: e.target.value })}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <Label htmlFor="description">Problem Statement</Label>
                 <Textarea
@@ -644,7 +872,7 @@ export default function NewProjectWizard() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="requirements">Requirements / PRD</Label>
-                  <Badge variant="outline">project_inputs.input_type = prd_text</Badge>
+                  <Badge variant="outline">Tip: include goals and acceptance criteria</Badge>
                 </div>
                 <Textarea
                   id="requirements"
@@ -684,7 +912,7 @@ export default function NewProjectWizard() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-wrap gap-3">
-                <Button onClick={runAnalysis} disabled={isLoading.analysis}>
+                <Button onClick={() => runAnalysis()} disabled={isLoading.analysis}>
                   {isLoading.analysis ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
                   Analyze requirements
                 </Button>
@@ -699,7 +927,7 @@ export default function NewProjectWizard() {
               </div>
 
               {analysis && (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-2">
                     <Card className="border-blue-100 bg-blue-50/60">
                       <CardHeader className="pb-2">
@@ -784,6 +1012,71 @@ export default function NewProjectWizard() {
                       ))}
                     </CardContent>
                   </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-gray-900">Review checklist</CardTitle>
+                      <CardDescription>Use this as a quick sanity check before planning.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm text-gray-700">
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Does the summary match what you actually want to ship?</li>
+                        <li>Are there any missing key risks or dependencies?</li>
+                        <li>Are must‑have features clearly represented?</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-gray-900">Refine analysis</CardTitle>
+                        <CardDescription>Tell AI what to adjust, then re‑run analysis.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <Textarea
+                          rows={3}
+                          placeholder="e.g. Emphasize mobile experience, keep MVP to 2 sprints, call out data privacy risks."
+                          value={analysisRefinement}
+                          onChange={(e) => setAnalysisRefinement(e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => analysisRefinement.trim() && runAnalysis(analysisRefinement.trim())}
+                          disabled={isLoading.analysis || !analysisRefinement.trim()}
+                        >
+                          {isLoading.analysis ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4 mr-2" />
+                          )}
+                          Refine with this note
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-gray-900">Baseline this plan</CardTitle>
+                        <CardDescription>Mark this analysis as your reference point for changes later.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm text-gray-700">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 rounded border-gray-300"
+                            checked={analysisIsBaseline}
+                            onChange={(e) => setAnalysisIsBaseline(e.target.checked)}
+                          />
+                          <span>Mark this as my current baseline</span>
+                        </label>
+                        <p className="text-xs text-gray-500">
+                          This doesn&apos;t change any data yet, but it helps you mentally anchor future changes against this plan.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -814,6 +1107,43 @@ export default function NewProjectWizard() {
                   Continue to plan
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-gray-600">Sprint length</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 2, 3].map((weeks) => (
+                      <Button
+                        key={weeks}
+                        type="button"
+                        size="sm"
+                        variant={sprintLengthWeeks === weeks ? "default" : "outline"}
+                        onClick={() => setSprintLengthWeeks(weeks)}
+                      >
+                        {weeks} week{weeks > 1 ? "s" : ""}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-gray-600">Pace</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(["conservative", "normal", "aggressive"] as const).map((level) => (
+                      <Button
+                        key={level}
+                        type="button"
+                        size="sm"
+                        variant={pace === level ? "default" : "outline"}
+                        onClick={() => setPace(level)}
+                      >
+                        {level === "conservative" && "Conservative"}
+                        {level === "normal" && "Normal"}
+                        {level === "aggressive" && "Aggressive"}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
@@ -848,7 +1178,9 @@ export default function NewProjectWizard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-semibold">{tasks.length || 0}</div>
-                    <div className="text-xs text-gray-500">Status set to pending</div>
+                    <div className="text-xs text-gray-500">
+                      Status set to pending{topEffortArea ? ` · Most effort: ${topEffortArea}` : ""}
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -861,16 +1193,17 @@ export default function NewProjectWizard() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-6 text-xs font-medium text-gray-500">
+                  <div className="grid grid-cols-7 text-xs font-medium text-gray-500">
                     <div className="col-span-2">Title</div>
                     <div>Type</div>
                     <div>Estimate</div>
                     <div>Priority</div>
+                    <div>Scope</div>
                     <div>Sprint</div>
                   </div>
                   <div className="divide-y">
                     {tasks.map((task) => (
-                      <div key={task.id} className="grid grid-cols-6 py-3 items-start">
+                      <div key={task.id} className="grid grid-cols-7 py-3 items-start">
                         <div className="col-span-2">
                           <div className="font-medium text-gray-900">{task.title}</div>
                           <p className="text-sm text-gray-600">{task.description}</p>
@@ -880,6 +1213,21 @@ export default function NewProjectWizard() {
                         </div>
                         <div className="text-sm">{task.estimated_hours}h</div>
                         <div className="text-sm">P{task.priority}</div>
+                        <div className="text-sm">
+                          <button
+                            type="button"
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getScopeBadgeClass(task.scope)}`}
+                            onClick={() =>
+                              setTasks((prev) =>
+                                prev.map((t) =>
+                                  t.id === task.id ? { ...t, scope: nextScope(t.scope || "must_have") } : t
+                                )
+                              )
+                            }
+                          >
+                            {getScopeLabel(task.scope || "must_have")}
+                          </button>
+                        </div>
                         <div className="text-sm">
                           {task.sprint_id ? (
                             <Badge variant="secondary">{sprints.find((s) => s.id === task.sprint_id)?.name || "Sprint"}</Badge>
@@ -933,6 +1281,57 @@ export default function NewProjectWizard() {
               <CardDescription>Check timeline, workload, and how hours are spread across the team before saving.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">Who will work on this?</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={teamPreset === "solo" ? "default" : "outline"}
+                    onClick={() => {
+                      setTeamPreset("solo")
+                      setResources([
+                        { id: "res-solo", name: "You", role: "Generalist", weekly_capacity_hours: 30 }
+                      ])
+                      setAssignments([])
+                      setStatusMessage("Team set to just you. Run auto-allocate again to rebalance tasks.")
+                    }}
+                  >
+                    Just me
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={teamPreset === "small" ? "default" : "outline"}
+                    onClick={() => {
+                      setTeamPreset("small")
+                      setResources(defaultResources)
+                      setAssignments([])
+                      setStatusMessage("Team set to a small squad. Run auto-allocate again to rebalance tasks.")
+                    }}
+                  >
+                    Small team (2–3)
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={teamPreset === "large" ? "default" : "outline"}
+                    onClick={() => {
+                      setTeamPreset("large")
+                      setResources([
+                        ...defaultResources,
+                        { id: "res-4", name: "Backend Dev", role: "Backend", weekly_capacity_hours: 32 },
+                        { id: "res-5", name: "QA", role: "QA", weekly_capacity_hours: 32 }
+                      ])
+                      setAssignments([])
+                      setStatusMessage("Team set to a larger group. Run auto-allocate again to rebalance tasks.")
+                    }}
+                  >
+                    Larger team (4–5)
+                  </Button>
+                </div>
+              </div>
+
               <div className="flex flex-wrap gap-3">
                 <Button onClick={autoAllocateResources} disabled={!tasks.length}>
                   <Users2 className="h-4 w-4 mr-2" />
@@ -942,11 +1341,50 @@ export default function NewProjectWizard() {
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to sprints
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveStep("backlog")}
+                >
+                  I want to simplify scope
+                </Button>
                 <Button onClick={saveProject} disabled={isLoading.saving}>
                   {isLoading.saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowRight className="h-4 w-4 mr-2" />}
-                  Save project
+                  Looks good, create project
                 </Button>
               </div>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-gray-900">Quick recap before you create</CardTitle>
+                  <CardDescription>Make sure the plan matches your intent.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3 text-sm text-gray-700">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 mb-1">Goal & outcome</div>
+                    <div className="font-medium text-gray-900 line-clamp-3">
+                      {projectMeta.goal || "No goal written yet"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 mb-1">Timeline</div>
+                    <div>
+                      Target finish:{" "}
+                      {estimatedFinishDate ? formatDate(estimatedFinishDate) : "Not estimated yet"}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Timeline risk (based on workload): {timelineRisk}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 mb-1">Scope & team load</div>
+                    <div>{sprints.length} sprints · {tasks.length} tasks</div>
+                    <div className="text-xs text-gray-500">
+                      Average team utilization: {overallUtilization}%
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Card>
                 <CardHeader className="pb-2">
