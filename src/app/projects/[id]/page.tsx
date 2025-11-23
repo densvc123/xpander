@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import type { DragEvent } from "react"
 import { useParams } from "next/navigation"
 import { MainLayout } from "@/components/layout/main-layout"
@@ -69,6 +69,13 @@ import type {
   ProjectDecision,
   ProjectMilestone
 } from "@/types/governance"
+
+const RISK_SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1
+}
 
 // Mock project data
 const mockProject = {
@@ -228,6 +235,15 @@ export default function ProjectDetailPage() {
     ? Math.round((activeSprintCompleted / activeSprint.tasks.length) * 100)
     : 0
   const activeSprintOpenTasks = activeSprint ? activeSprint.tasks.filter((task) => task.status !== "completed") : []
+
+  const primaryRisk = useMemo(() => {
+    if (!risks.length) return null
+    return [...risks].sort((a, b) => {
+      const aRank = RISK_SEVERITY_RANK[a.severity] || 0
+      const bRank = RISK_SEVERITY_RANK[b.severity] || 0
+      return bRank - aRank
+    })[0]
+  }, [risks])
 
   // Fetch change requests
   const fetchChangeRequests = useCallback(async () => {
@@ -595,9 +611,9 @@ export default function ProjectDetailPage() {
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
             <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-7">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="requirements">Requirements</TabsTrigger>
+              <TabsTrigger value="timeline">Plan</TabsTrigger>
               <TabsTrigger value="sprints">Sprints</TabsTrigger>
-              <TabsTrigger value="timeline">Project Timeline</TabsTrigger>
+              <TabsTrigger value="requirements">Requirements</TabsTrigger>
               <TabsTrigger value="changes">Changes</TabsTrigger>
               <TabsTrigger value="advisor">AI Advisor</TabsTrigger>
               <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -608,8 +624,8 @@ export default function ProjectDetailPage() {
           <TabsContent value="overview" className="space-y-6">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle>Project pulse</CardTitle>
-                <CardDescription>Concise snapshot for the project manager</CardDescription>
+                <CardTitle>Project health & key stats</CardTitle>
+                <CardDescription>Everything a PM needs to understand status, timing, and scope.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -719,14 +735,29 @@ export default function ProjectDetailPage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle>Priority actions</CardTitle>
-                  <CardDescription>Fast paths for the week</CardDescription>
+                  <CardTitle>Risks & next steps</CardTitle>
+                  <CardDescription>What needs your attention this week</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                    <p className="text-xs font-semibold text-amber-700">Top risk</p>
+                    {primaryRisk ? (
+                      <>
+                        <p className="font-medium text-amber-900">{primaryRisk.title}</p>
+                        <p className="text-xs text-amber-700">
+                          Severity {primaryRisk.severity} {primaryRisk.owner ? `• Owner ${primaryRisk.owner}` : ""}
+                        </p>
+                        <p className="text-xs text-amber-700">{primaryRisk.impact}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-amber-700">No open risks right now.</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">Suggested next steps</p>
                   <div className="grid gap-2">
                     <Button variant="outline" className="justify-start" onClick={() => setActiveTab("timeline")}>
                       <BarChart3 className="h-4 w-4 mr-2" />
-                      Review project timeline
+                      Review plan & timeline
                     </Button>
                     <Button variant="outline" className="justify-start" onClick={() => setActiveTab("sprints")}>
                       <ListTodo className="h-4 w-4 mr-2" />
@@ -753,7 +784,7 @@ export default function ProjectDetailPage() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle>Team & workload</CardTitle>
-                  <CardDescription>Capacity and load this week</CardDescription>
+                  <CardDescription>Detailed view of capacity vs. load</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between text-sm text-gray-500">
@@ -874,13 +905,42 @@ export default function ProjectDetailPage() {
           {/* Requirements Tab */}
           <TabsContent value="requirements" className="space-y-6">
             <Card>
+              <CardHeader className="pb-2">
+                <CardTitle>Project brief</CardTitle>
+                <CardDescription>High-level context for what this project is trying to achieve.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-gray-700">
+                <div>
+                  <p className="text-xs text-gray-500">Goal / outcome</p>
+                  <p className="font-medium text-gray-900">
+                    {mockProject.description || "Goal has not been documented yet."}
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3 text-xs text-gray-500">
+                  <div>
+                    <p className="font-semibold text-gray-600">Audience</p>
+                    <p>Not captured yet</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-600">Success metrics</p>
+                    <p>Define how you will measure success (usage, revenue, satisfaction, etc.).</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-600">Constraints</p>
+                    <p>Capture tech, budget, or compliance limits here.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
                   Project Requirements
                 </CardTitle>
                 <CardDescription>
-                  Paste your PRD, user stories, or project requirements. AI will analyze and break them down into tasks.
+                  Keep the project brief and PRD here so anyone joining can understand scope, goals, and constraints.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -911,6 +971,16 @@ Example:
                     )}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-gray-900">Requirements history</CardTitle>
+                <CardDescription>Versioning and last-updated details.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-xs text-gray-500">
+                Last updated information is not tracked yet. Once requirements are stored with versions, they will be summarized here.
               </CardContent>
             </Card>
 
@@ -1019,7 +1089,7 @@ Example:
               <div>
                 <h3 className="text-lg font-semibold">Sprints</h3>
                 <p className="text-sm text-gray-500">
-                  {sprints.length} sprints • {totalTasks} tasks
+                  {sprints.length} sprints • {totalTasks} tasks ({sprintCounts.active} active / {sprintCounts.planned} upcoming)
                 </p>
                 <p className="text-xs text-gray-500">Drag tasks between sprints to fine-tune scope and load.</p>
               </div>
@@ -1197,8 +1267,11 @@ Example:
           <TabsContent value="timeline" className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Project Timeline</h3>
-                <p className="text-sm text-gray-500">Review sprints as a list or switch to calendar view</p>
+                <h3 className="text-lg font-semibold">Plan & timeline</h3>
+                <p className="text-sm text-gray-500">See the critical path, key milestones, and how much buffer remains.</p>
+                <p className="text-xs text-gray-500">
+                  Target delivery around {formatDate(mockProject.deadline)} • {daysRemaining} days to go
+                </p>
               </div>
               <div className="flex items-center gap-2 rounded-md border bg-gray-50 p-1">
                 <Button
@@ -1310,9 +1383,9 @@ Example:
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Target className="h-5 w-5" />
-                      Baseline Comparison
+                      Baseline vs current plan
                     </CardTitle>
-                    <CardDescription>Compare current state with project baseline</CardDescription>
+                    <CardDescription>Spot scope and timeline drift at a glance.</CardDescription>
                   </div>
                   <Button variant="outline" onClick={handleCreateBaseline}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -1387,14 +1460,14 @@ Example:
             {/* Change Requests Section */}
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Change Requests</h3>
-                <p className="text-sm text-gray-500">{changeRequests.length} requests</p>
+                <h3 className="text-lg font-semibold">Change requests & approvals</h3>
+                <p className="text-sm text-gray-500">{changeRequests.length} open request(s)</p>
               </div>
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
-                    New Change Request
+                    Request a change
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[500px]">
@@ -1740,9 +1813,14 @@ Example:
                   <Sparkles className="h-5 w-5 text-emerald-600" />
                   AI Advisor
                 </CardTitle>
-                <CardDescription>Ask questions about your project, get suggestions, and insights</CardDescription>
+                <CardDescription>Ask for recovery plans, scope trade-offs, or prep for stakeholder reviews.</CardDescription>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
+                <div className="mb-4 flex flex-wrap gap-3 text-xs text-gray-500">
+                  <span>Progress {mockProject.progress}%</span>
+                  <span>{daysRemaining} days left</span>
+                  <span>Top risk: {primaryRisk ? primaryRisk.title : "None flagged"}</span>
+                </div>
                 <ScrollArea className="flex-1 pr-4">
                   <div className="space-y-4">
                     {messages.map((msg, index) => (
@@ -1837,9 +1915,9 @@ Example:
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <FileText className="h-5 w-5" />
-                      Generate Reports
+                      Generate shareable reports
                     </CardTitle>
-                    <CardDescription>AI-powered project reports for stakeholders</CardDescription>
+                    <CardDescription>Produce status, sprint review, or resource updates for stakeholders.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
