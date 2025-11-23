@@ -84,18 +84,39 @@ Guidelines:
 
 ---
 
-## 4. No changes required for resources or sprints
+## 4. Resources – source and active flags
 
-The wizard’s new controls for:
+The Resources view and project detail pages now treat resources as either:
+- Staff (internal team members), or
+- Outsourcing (contractors/partners).
+
+They also allow marking resources as active/inactive so you can keep historic entries without skewing current capacity.
+
+Add the following columns to `public.resources`:
+
+```sql
+ALTER TABLE public.resources
+  ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'staff'
+    CHECK (source IN ('staff', 'outsourcing')),
+  ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+```
+
+Guidelines:
+- `source` tells you if the resource is internal or external; useful for cost and risk reporting.
+- `active` controls whether a resource participates in current capacity/utilization calculations.
+
+Existing rows will default to `source = 'staff'` and `active = true`.
+
+---
+
+## 5. Optional: Persist wizard planning preferences
+
+The wizard’s planning controls for:
 - Team presets (just me / small team / larger team),
 - Sprint length (1/2/3 weeks),
 - Planning pace (conservative/normal/aggressive),
 
-are implemented as planning‑time inputs. They do not require schema changes:
-- Resources still use the existing `public.resources` and `public.task_assignments`.
-- Sprints still use `public.sprints` (dates + `order_index`).
-
-If you later want to persist wizard choices (e.g., default sprint length or planning pace per project), you can:
+are currently planning‑time inputs. If you want to remember the preferred sprint length and pace per project, you can:
 
 ```sql
 ALTER TABLE public.projects
@@ -109,11 +130,10 @@ These are strictly optional and not required for the current UI to function.
 
 ---
 
-## 5. Rollout notes
+## 6. Rollout notes
 
 - All `ALTER TABLE ... ADD COLUMN` statements are additive and backward‑compatible.
 - RLS policies in `supabase/schema.sql` operate on `user_id` / `project_id` and do not need changes for these new columns.
 - After applying migrations, you can progressively:
   - Map wizard state into these columns in your API routes.
   - Use `scope_tier` in reports, dashboards, and AI prompts for better prioritization and scope management.
-

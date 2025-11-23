@@ -7,6 +7,8 @@ import { MainLayout } from "@/components/layout/main-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -16,6 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Sparkles,
   Users,
@@ -31,7 +42,8 @@ import {
   Briefcase,
   Calendar,
   Target,
-  LineChart as LineChartIcon
+  LineChart as LineChartIcon,
+  UserPlus
 } from "lucide-react"
 import {
   BarChart,
@@ -60,6 +72,8 @@ type Resource = {
   status: "balanced" | "available" | "overloaded"
   avatar?: string
   assignments: ResourceAssignment[]
+  source: "staff" | "outsourcing"
+  active: boolean
 }
 
 const mockResources: Resource[] = [
@@ -70,6 +84,8 @@ const mockResources: Resource[] = [
     capacity: 40,
     assigned: 38,
     status: "balanced",
+    source: "staff",
+    active: true,
     assignments: [
       { project: "XPANDER MVP", hours: 20, focus: "Auth & Dashboards", projectId: "1" },
       { project: "Mobile App Redesign", hours: 12, focus: "API contracts", projectId: "2" },
@@ -83,6 +99,8 @@ const mockResources: Resource[] = [
     capacity: 40,
     assigned: 26,
     status: "available",
+    source: "staff",
+    active: true,
     assignments: [
       { project: "XPANDER MVP", hours: 14, focus: "UI polish", projectId: "1" },
       { project: "Documentation Portal", hours: 12, focus: "Docs UI", projectId: "4" }
@@ -95,6 +113,8 @@ const mockResources: Resource[] = [
     capacity: 40,
     assigned: 45,
     status: "overloaded",
+    source: "staff",
+    active: true,
     assignments: [
       { project: "XPANDER MVP", hours: 24, focus: "Reporting API", projectId: "1" },
       { project: "API Integration", hours: 21, focus: "Analytics", projectId: "3" }
@@ -107,6 +127,8 @@ const mockResources: Resource[] = [
     capacity: 32,
     assigned: 22,
     status: "balanced",
+    source: "staff",
+    active: true,
     assignments: [
       { project: "XPANDER MVP", hours: 12, focus: "Requirements", projectId: "1" },
       { project: "Mobile App Redesign", hours: 10, focus: "UX review", projectId: "2" }
@@ -119,6 +141,8 @@ const mockResources: Resource[] = [
     capacity: 40,
     assigned: 32,
     status: "balanced",
+    source: "outsourcing",
+    active: true,
     assignments: [
       { project: "XPANDER MVP", hours: 16, focus: "Test automation", projectId: "1" },
       { project: "API Integration", hours: 16, focus: "Integration testing", projectId: "3" }
@@ -258,9 +282,21 @@ const generateWorkloadData = (startDate: Date, endDate: Date, period: "weekly" |
 
 export default function ResourcesPage() {
   const [activeTab, setActiveTab] = useState("team")
+  const [resources, setResources] = useState<Resource[]>(mockResources)
   const [showAIPanel, setShowAIPanel] = useState(true)
   const [chartPeriod, setChartPeriod] = useState<"weekly" | "monthly">("weekly")
   const [chartView, setChartView] = useState<"team" | "project" | "utilization">("team")
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [newResourceName, setNewResourceName] = useState("")
+  const [newResourceRole, setNewResourceRole] = useState("")
+  const [newResourceCapacity, setNewResourceCapacity] = useState(40)
+  const [newResourceSource, setNewResourceSource] = useState<"staff" | "outsourcing">("staff")
+  const [isAddingResource, setIsAddingResource] = useState(false)
+
+  const generateResourceId = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `res-${Math.random().toString(36).slice(2)}`
 
   // Date range state - default to last 6 weeks
   const [dateFrom, setDateFrom] = useState<string>(() => {
@@ -279,27 +315,32 @@ export default function ResourcesPage() {
   }, [dateFrom, dateTo, chartPeriod])
 
   const summary = useMemo(() => {
-    const totalCapacity = mockResources.reduce((sum, r) => sum + r.capacity, 0)
-    const totalAssigned = mockResources.reduce((sum, r) => sum + r.assigned, 0)
+    const activeResources = resources.filter(r => r.active)
+    const totalCapacity = activeResources.reduce((sum, r) => sum + r.capacity, 0)
+    const totalAssigned = activeResources.reduce((sum, r) => sum + r.assigned, 0)
     const utilization = totalCapacity > 0 ? Math.round((totalAssigned / totalCapacity) * 100) : 0
-    const overloaded = mockResources.filter((r) => r.assigned > r.capacity).length
-    const available = mockResources.filter((r) => r.assigned / r.capacity < 0.8).length
-    const balanced = mockResources.length - overloaded - available
-    const avgUtilization = mockResources.reduce((sum, r) => sum + (r.capacity > 0 ? (r.assigned / r.capacity) * 100 : 0), 0) / mockResources.length
+    const overloaded = activeResources.filter((r) => r.assigned > r.capacity).length
+    const available = activeResources.filter((r) => r.assigned / r.capacity < 0.8).length
+    const balanced = activeResources.length - overloaded - available
+    const avgUtilization = activeResources.length > 0
+      ? activeResources.reduce((sum, r) => sum + (r.capacity > 0 ? (r.assigned / r.capacity) * 100 : 0), 0) / activeResources.length
+      : 0
     return { totalCapacity, totalAssigned, utilization, overloaded, available, balanced, avgUtilization: Math.round(avgUtilization) }
-  }, [])
+  }, [resources])
 
   const projectAllocations = useMemo(() => {
     return mockProjects.map(project => {
-      const resources = mockResources.filter(r =>
-        r.assignments.some(a => a.projectId === project.id)
-      ).map(r => {
-        const assignment = r.assignments.find(a => a.projectId === project.id)
-        return { ...r, projectHours: assignment?.hours || 0, focus: assignment?.focus || "" }
-      })
-      return { ...project, resources }
+      const projectResources = resources
+        .filter(r => r.active && r.assignments.some(a => a.projectId === project.id))
+        .map(r => {
+          const assignment = r.assignments.find(a => a.projectId === project.id)
+          return { ...r, projectHours: assignment?.hours || 0, focus: assignment?.focus || "" }
+        })
+      const projectCapacity = projectResources.reduce((sum, r) => sum + r.capacity, 0)
+      const utilization = projectCapacity > 0 ? Math.round((project.totalHours / projectCapacity) * 100) : 0
+      return { ...project, resources: projectResources, utilization }
     })
-  }, [])
+  }, [resources])
 
   const getUtilizationColor = (utilization: number) => {
     if (utilization > 100) return "text-red-600"
@@ -333,7 +374,11 @@ export default function ResourcesPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Resource Management</h2>
-            <p className="text-gray-500">Cross-project capacity planning and workload optimization</p>
+            <p className="text-gray-500">
+              Cross-project capacity planning and workload optimization.
+              {" "}
+              Today: {summary.overloaded} overloaded, {summary.available} with spare capacity.
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -347,88 +392,70 @@ export default function ResourcesPage() {
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Tiles */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Team Size</p>
-                  <p className="text-2xl font-bold">{mockResources.length}</p>
-                  <p className="text-xs text-gray-400">members</p>
-                </div>
-                <Users className="h-8 w-8 text-blue-200" />
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Team Size</p>
+              <p className="text-2xl font-bold">{resources.length}</p>
+              <p className="text-xs text-gray-400">members</p>
+            </div>
+            <Users className="h-8 w-8 text-blue-200" />
+          </div>
 
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Total Capacity</p>
-                  <p className="text-2xl font-bold">{summary.totalCapacity}h</p>
-                  <p className="text-xs text-gray-400">per week</p>
-                </div>
-                <Target className="h-8 w-8 text-purple-200" />
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Total Capacity</p>
+              <p className="text-2xl font-bold">{summary.totalCapacity}h</p>
+              <p className="text-xs text-gray-400">per week</p>
+            </div>
+            <Target className="h-8 w-8 text-purple-200" />
+          </div>
 
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Allocated</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-2xl font-bold">{summary.totalAssigned}h</p>
-                    <Badge variant={summary.utilization > 100 ? "destructive" : summary.utilization > 90 ? "warning" : "secondary"}>
-                      {summary.utilization}%
-                    </Badge>
-                  </div>
-                </div>
-                <BarChart3 className="h-8 w-8 text-emerald-200" />
+          <div className="rounded-lg border p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Allocated</p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold">{summary.totalAssigned}h</p>
+                <Badge variant={summary.utilization > 100 ? "destructive" : summary.utilization > 90 ? "warning" : "secondary"}>
+                  {summary.utilization}%
+                </Badge>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <BarChart3 className="h-8 w-8 text-emerald-200" />
+          </div>
 
-          <Card>
-            <CardContent className="pt-4">
-              <div className="space-y-2">
-                <p className="text-sm text-gray-500">Team Health</p>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1">
-                    <div className="h-3 w-3 rounded-full bg-red-500" />
-                    <span className="text-sm font-medium">{summary.overloaded}</span>
-                    <span className="text-xs text-gray-400">over</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                    <span className="text-sm font-medium">{summary.balanced}</span>
-                    <span className="text-xs text-gray-400">ok</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-3 w-3 rounded-full bg-blue-500" />
-                    <span className="text-sm font-medium">{summary.available}</span>
-                    <span className="text-xs text-gray-400">free</span>
-                  </div>
+          <div className="rounded-lg border p-3">
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Team Health</p>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                  <div className="h-3 w-3 rounded-full bg-red-500" />
+                  <span className="text-sm font-medium">{summary.overloaded}</span>
+                  <span className="text-xs text-gray-400">over</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                  <span className="text-sm font-medium">{summary.balanced}</span>
+                  <span className="text-xs text-gray-400">ok</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="h-3 w-3 rounded-full bg-blue-500" />
+                  <span className="text-sm font-medium">{summary.available}</span>
+                  <span className="text-xs text-gray-400">free</span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Active Projects</p>
-                  <p className="text-2xl font-bold">{mockProjects.filter(p => p.status === "active").length}</p>
-                  <p className="text-xs text-gray-400">{mockProjects.length} total</p>
-                </div>
-                <FolderKanban className="h-8 w-8 text-amber-200" />
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Active Projects</p>
+              <p className="text-2xl font-bold">{mockProjects.filter(p => p.status === "active").length}</p>
+              <p className="text-xs text-gray-400">{mockProjects.length} total</p>
+            </div>
+            <FolderKanban className="h-8 w-8 text-amber-200" />
+          </div>
         </div>
 
         {/* AI Insights Panel */}
@@ -513,10 +540,15 @@ export default function ResourcesPage() {
                 </div>
               )}
 
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
-                <Sparkles className="h-4 w-4 mr-2" />
-                Apply AI Recommendations
-              </Button>
+              <div className="flex items-center justify-between pt-3 border-t mt-2">
+                <p className="text-xs text-emerald-800">
+                  If you apply these moves, no one should sit above {aiSuggestions.projected.after.max}% utilization.
+                </p>
+                <Button size="sm" variant="outline" className="gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  Apply suggestions (soon)
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -544,11 +576,132 @@ export default function ResourcesPage() {
 
           {/* Team View Tab */}
           <TabsContent value="team" className="space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs text-gray-500">
+                Sorted by highest load first so you can spot overload quickly.
+              </p>
+              <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1">
+                    <UserPlus className="h-4 w-4" />
+                    Add resource
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[480px]">
+                  <DialogHeader>
+                    <DialogTitle>Add resource</DialogTitle>
+                    <DialogDescription>Add a staff member or outsourcing resource to your pool.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="resource-name">Name</Label>
+                      <Input
+                        id="resource-name"
+                        placeholder="e.g. Jane Doe"
+                        value={newResourceName}
+                        onChange={(e) => setNewResourceName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="resource-role">Role</Label>
+                      <Input
+                        id="resource-role"
+                        placeholder="e.g. Backend Developer"
+                        value={newResourceRole}
+                        onChange={(e) => setNewResourceRole(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-3 md:flex-row">
+                      <div className="space-y-1.5 md:flex-1">
+                        <Label htmlFor="resource-capacity">Weekly capacity (hours)</Label>
+                        <Input
+                          id="resource-capacity"
+                          type="number"
+                          min={1}
+                          max={80}
+                          value={newResourceCapacity}
+                          onChange={(e) => setNewResourceCapacity(Number(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="space-y-1.5 md:flex-1">
+                        <Label>Source</Label>
+                        <Select
+                          value={newResourceSource}
+                          onValueChange={(v) => setNewResourceSource(v as "staff" | "outsourcing")}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="staff">Staff</SelectItem>
+                            <SelectItem value="outsourcing">Outsourcing</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      New resources are tracked locally for now. After running the SQL migration for
+                      <code className="mx-1">public.resources</code>, you can wire this form to Supabase.
+                    </p>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowAddDialog(false)
+                        setNewResourceName("")
+                        setNewResourceRole("")
+                        setNewResourceCapacity(40)
+                        setNewResourceSource("staff")
+                      }}
+                    >
+                      Close
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={!newResourceName.trim() || isAddingResource}
+                      onClick={() => {
+                        if (!newResourceName.trim()) return
+                        setIsAddingResource(true)
+                        setResources((prev) => [
+                          ...prev,
+                          {
+                            id: generateResourceId(),
+                            name: newResourceName.trim(),
+                            role: newResourceRole.trim() || "Other",
+                            capacity: newResourceCapacity > 0 ? newResourceCapacity : 40,
+                            assigned: 0,
+                            status: "available",
+                            source: newResourceSource,
+                            active: true,
+                            assignments: []
+                          }
+                        ])
+                        setIsAddingResource(false)
+                        setShowAddDialog(false)
+                        setNewResourceName("")
+                        setNewResourceRole("")
+                        setNewResourceCapacity(40)
+                        setNewResourceSource("staff")
+                      }}
+                    >
+                      {isAddingResource ? "Adding..." : "Add resource"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {mockResources.map((resource) => {
+              {resources.map((resource) => {
                 const utilization = resource.capacity > 0 ? Math.round((resource.assigned / resource.capacity) * 100) : 0
                 return (
-                  <Card key={resource.id} className={`transition-all hover:shadow-md ${resource.status === "overloaded" ? "border-red-200" : ""}`}>
+                  <Card
+                    key={resource.id}
+                    className={`transition-all hover:shadow-md ${
+                      resource.status === "overloaded" ? "border-red-200" : ""
+                    } ${!resource.active ? "opacity-60 border-dashed" : ""}`}
+                  >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
@@ -560,15 +713,47 @@ export default function ResourcesPage() {
                           </div>
                           <div>
                             <CardTitle className="text-base">{resource.name}</CardTitle>
-                            <CardDescription>{resource.role}</CardDescription>
+                            <CardDescription>
+                              {resource.role} • {resource.source === "staff" ? "Staff" : "Outsourcing"}
+                            </CardDescription>
                           </div>
                         </div>
-                        {getStatusIcon(resource.status)}
+                        <div className="flex flex-col items-end gap-1">
+                          {getStatusIcon(resource.status)}
+                          <Badge variant={resource.active ? "secondary" : "outline"} className="text-[10px] mt-1">
+                            {resource.active ? "Active" : "Inactive"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            className="mt-1"
+                            onClick={() =>
+                              setResources((prev) =>
+                                prev.map((r) =>
+                                  r.id === resource.id ? { ...r, active: !r.active } : r
+                                )
+                              )
+                            }
+                          >
+                            {resource.active ? "Deactivate" : "Activate"}
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {/* Utilization Bar */}
                       <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>Status</span>
+                          <span className="font-medium">
+                            {resource.status === "overloaded"
+                              ? "Overloaded"
+                              : resource.status === "available"
+                              ? "Available"
+                              : "Balanced"}
+                          </span>
+                        </div>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-gray-500">{resource.assigned}h / {resource.capacity}h</span>
                           <span className={`font-medium ${getUtilizationColor(utilization)}`}>{utilization}%</span>
@@ -624,6 +809,9 @@ export default function ResourcesPage() {
 
           {/* Projects View Tab */}
           <TabsContent value="projects" className="space-y-4">
+            <p className="text-xs text-gray-500">
+              See how each project uses team capacity and where bottlenecks might appear.
+            </p>
             <div className="space-y-4">
               {projectAllocations.map((project) => (
                 <Card key={project.id}>
@@ -640,7 +828,10 @@ export default function ResourcesPage() {
                               {project.status}
                             </Badge>
                           </CardTitle>
-                          <CardDescription>{project.resources.length} team members • {project.totalHours}h total</CardDescription>
+                          <CardDescription>
+                            {project.resources.length} team members • {project.totalHours}h planned •{" "}
+                            {project.utilization > 0 ? `${project.utilization}% of available capacity` : "capacity not set"}
+                          </CardDescription>
                         </div>
                       </div>
                       <Link href={`/projects/${project.id}`}>
@@ -821,6 +1012,9 @@ export default function ResourcesPage() {
                       <CardDescription>
                         {chartPeriod === "weekly" ? "Weekly" : "Monthly"} hours per team member (stacked)
                       </CardDescription>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Use this to spot recurring spikes where the team consistently runs hot.
+                      </p>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">Total hours / period</span>
@@ -1146,7 +1340,7 @@ export default function ResourcesPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Weekly Capacity Overview</CardTitle>
-                <CardDescription>Team capacity and allocation breakdown</CardDescription>
+                <CardDescription>Team capacity and allocation breakdown.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
@@ -1168,6 +1362,9 @@ export default function ResourcesPage() {
                       <span>{summary.totalAssigned}h allocated</span>
                       <span>{summary.totalCapacity}h capacity</span>
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      If total utilization stays above 100%, consider cutting scope, redistributing work, or adding capacity.
+                    </p>
                   </div>
 
                   {/* Individual Bars */}

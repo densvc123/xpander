@@ -1860,53 +1860,41 @@ Example:
           <TabsContent value="reports" className="space-y-6">
             {/* Quick Stats Header */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Health</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="success">{mockProject.health}</Badge>
-                      </div>
-                    </div>
-                    <CheckCircle2 className="h-8 w-8 text-emerald-200" />
+              <div className="rounded-lg border p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Health</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="success">{mockProject.health}</Badge>
                   </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Progress</p>
-                      <p className="text-2xl font-bold">{mockProject.progress}%</p>
-                    </div>
-                    <BarChart3 className="h-8 w-8 text-blue-200" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Tasks</p>
-                      <p className="text-2xl font-bold">{completedTasks}/{totalTasks}</p>
-                    </div>
-                    <ListTodo className="h-8 w-8 text-purple-200" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Days Left</p>
-                      <p className="text-2xl font-bold">{daysRemaining}</p>
-                    </div>
-                    <Clock className="h-8 w-8 text-amber-200" />
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+                <CheckCircle2 className="h-8 w-8 text-emerald-200" />
+              </div>
+              <div className="rounded-lg border p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Progress</p>
+                  <p className="text-2xl font-bold">{mockProject.progress}%</p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-blue-200" />
+              </div>
+              <div className="rounded-lg border p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Tasks</p>
+                  <p className="text-2xl font-bold">{completedTasks}/{totalTasks}</p>
+                </div>
+                <ListTodo className="h-8 w-8 text-purple-200" />
+              </div>
+              <div className="rounded-lg border p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Days Left</p>
+                  <p className="text-2xl font-bold">{daysRemaining}</p>
+                </div>
+                <Clock className="h-8 w-8 text-amber-200" />
+              </div>
             </div>
+
+            <p className="text-xs text-gray-500">
+              Use these reports to keep stakeholders aligned: generate status updates, sprint reviews, and risk summaries from the latest project data.
+            </p>
 
             {/* Report Generation */}
             <Card>
@@ -1934,7 +1922,11 @@ Example:
                       <CardDescription>Health, progress, timeline overview</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-gray-500">Includes: project health, milestone status, key metrics, blockers summary</p>
+                      <p className="text-xs text-gray-500">
+                        Includes: project health, milestone status, key metrics, blockers summary.
+                        Best for: weekly steering or sponsor updates.
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Click to generate a project status report.</p>
                     </CardContent>
                   </Card>
 
@@ -1949,7 +1941,11 @@ Example:
                       <CardDescription>Velocity and delivery metrics</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-gray-500">Includes: sprint velocity, burndown analysis, completed vs planned, team output</p>
+                      <p className="text-xs text-gray-500">
+                        Includes: sprint velocity, burndown analysis, completed vs planned, team output.
+                        Best for: sprint reviews and retrospectives.
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Click to generate a sprint performance report.</p>
                     </CardContent>
                   </Card>
 
@@ -1964,7 +1960,11 @@ Example:
                       <CardDescription>Scope changes and timeline effects</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-gray-500">Includes: approved changes, hours added/removed, baseline comparison, delay risks</p>
+                      <p className="text-xs text-gray-500">
+                        Includes: approved changes, hours added/removed, baseline comparison, delay risks.
+                        Best for: change advisory board and steering committees.
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Click to generate a change impact report.</p>
                     </CardContent>
                   </Card>
 
@@ -1979,7 +1979,11 @@ Example:
                       <CardDescription>Active risks and blockers</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-gray-500">Includes: risk register, active blockers, mitigation status, escalation needs</p>
+                      <p className="text-xs text-gray-500">
+                        Includes: risk register, active blockers, mitigation status, escalation needs.
+                        Best for: risk reviews and operational check-ins.
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Click to generate a risk & issues report.</p>
                     </CardContent>
                   </Card>
 
@@ -1994,7 +1998,11 @@ Example:
                       <CardDescription>AI-generated brief for leadership</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-gray-500">Includes: 1-page summary, key decisions needed, budget/timeline status, recommendations</p>
+                      <p className="text-xs text-gray-500">
+                        Includes: 1-page summary, key decisions needed, budget/timeline status, recommendations.
+                        Best for: executive summaries and board decks.
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Click to generate an executive summary.</p>
                     </CardContent>
                   </Card>
 
@@ -2009,91 +2017,113 @@ Example:
                       <CardDescription>Generate with AI prompt</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-gray-500">Describe what you need and AI will generate a tailored report</p>
+                      <p className="text-xs text-gray-500">
+                        Describe what you need and AI will generate a tailored report.
+                        Best for: ad-hoc client reports or internal deep dives.
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Click to start a custom report with an AI prompt.</p>
                     </CardContent>
                   </Card>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Project Summary Section */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Sprint Overview</CardTitle>
-                  <CardDescription>Current sprint status</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {activeSprint ? (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{activeSprint.name}</span>
-                        <Badge variant="default">Active</Badge>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm text-gray-500">
-                          <span>Progress</span>
-                          <span>{activeSprintProgress}%</span>
-                        </div>
-                        <Progress value={activeSprintProgress} className="h-2" />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                        <div className="rounded-md bg-gray-50 p-2">
-                          <p className="font-semibold">{activeSprint.tasks.length}</p>
-                          <p className="text-xs text-gray-500">Total</p>
-                        </div>
-                        <div className="rounded-md bg-emerald-50 p-2">
-                          <p className="font-semibold text-emerald-700">{activeSprintCompleted}</p>
-                          <p className="text-xs text-emerald-600">Done</p>
-                        </div>
-                        <div className="rounded-md bg-blue-50 p-2">
-                          <p className="font-semibold text-blue-700">{activeSprint.tasks.filter(t => t.status === "in_progress").length}</p>
-                          <p className="text-xs text-blue-600">In Progress</p>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500">No active sprint</p>
-                  )}
-                </CardContent>
-              </Card>
+            {/* Saved Reports */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Saved reports</CardTitle>
+                <CardDescription>History of reports generated for this project.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500">
+                  No reports generated yet. Once you generate a report, it will appear here with a link to view or copy.
+                </p>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Timeline Status</CardTitle>
-                  <CardDescription>Delivery forecast</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Target Deadline</span>
-                    <span className="font-medium">{formatDate(mockProject.deadline)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Days Remaining</span>
-                    <Badge variant={daysRemaining < 14 ? "warning" : "secondary"}>{daysRemaining} days</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Sprints Remaining</span>
-                    <span className="font-medium">{sprintCounts.planned} planned</span>
-                  </div>
-                  <div className="rounded-md bg-gray-50 p-3">
-                    <div className="flex items-center gap-2">
-                      {daysRemaining >= 14 ? (
+            {/* Project Summary Section */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Status preview</CardTitle>
+                <CardDescription>
+                  This is the content that will appear in a Project Status report: current sprint and delivery forecast.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Sprint overview</h4>
+                    <div className="space-y-3">
+                      {activeSprint ? (
                         <>
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                          <span className="text-sm text-emerald-700">On track for delivery</span>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{activeSprint.name}</span>
+                            <Badge variant="default">Active</Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm text-gray-500">
+                              <span>Progress</span>
+                              <span>{activeSprintProgress}%</span>
+                            </div>
+                            <Progress value={activeSprintProgress} className="h-2" />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                            <div className="rounded-md bg-gray-50 p-2">
+                              <p className="font-semibold">{activeSprint.tasks.length}</p>
+                              <p className="text-xs text-gray-500">Total</p>
+                            </div>
+                            <div className="rounded-md bg-emerald-50 p-2">
+                              <p className="font-semibold text-emerald-700">{activeSprintCompleted}</p>
+                              <p className="text-xs text-emerald-600">Done</p>
+                            </div>
+                            <div className="rounded-md bg-blue-50 p-2">
+                              <p className="font-semibold text-blue-700">
+                                {activeSprint.tasks.filter(t => t.status === "in_progress").length}
+                              </p>
+                              <p className="text-xs text-blue-600">In Progress</p>
+                            </div>
+                          </div>
                         </>
                       ) : (
-                        <>
-                          <AlertTriangle className="h-4 w-4 text-amber-500" />
-                          <span className="text-sm text-amber-700">Timeline pressure - monitor closely</span>
-                        </>
+                        <p className="text-sm text-gray-500">No active sprint</p>
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Timeline status</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Target Deadline</span>
+                        <span className="font-medium">{formatDate(mockProject.deadline)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Days Remaining</span>
+                        <Badge variant={daysRemaining < 14 ? "warning" : "secondary"}>{daysRemaining} days</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Sprints Remaining</span>
+                        <span className="font-medium">{sprintCounts.planned} planned</span>
+                      </div>
+                      <div className="rounded-md bg-gray-50 p-3">
+                        <div className="flex items-center gap-2">
+                          {daysRemaining >= 14 ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              <span className="text-sm text-emerald-700">On track for delivery</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              <span className="text-sm text-amber-700">Timeline pressure - monitor closely</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
