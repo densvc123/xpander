@@ -65,6 +65,11 @@ import type {
   ChangeArea,
   BaselineComparison
 } from "@/types/database"
+import type {
+  ProjectRisk,
+  ProjectDecision,
+  ProjectMilestone
+} from "@/types/governance"
 
 // Mock project data
 const mockProject = {
@@ -122,6 +127,8 @@ const mockTeamMembers = [
   { id: "3", name: "Maya Singh", role: "Backend", capacityHours: 32, workloadHours: 34 },
   { id: "4", name: "Noah Wright", role: "Product", capacityHours: 25, workloadHours: 18 }
 ]
+
+// Governance data (risks, decisions, milestones) is now fetched from API
 
 // Message type for advisor
 type Message = { role: "user" | "assistant"; content: string }
@@ -193,6 +200,12 @@ export default function ProjectDetailPage() {
   const [newChangePriority, setNewChangePriority] = useState<ChangePriority>("medium")
   const [newChangeArea, setNewChangeArea] = useState<ChangeArea>("other")
 
+  // Governance State (Risks, Decisions, Milestones)
+  const [risks, setRisks] = useState<ProjectRisk[]>([])
+  const [decisions, setDecisions] = useState<ProjectDecision[]>([])
+  const [milestones, setMilestones] = useState<ProjectMilestone[]>([])
+  const [isLoadingGovernance, setIsLoadingGovernance] = useState(false)
+
   const totalTasks = sprints.reduce((sum, sprint) => sum + sprint.tasks.length, 0)
   const completedTasks = sprints.reduce(
     (sum, sprint) => sum + sprint.tasks.filter((task) => task.status === "completed").length,
@@ -207,7 +220,10 @@ export default function ProjectDetailPage() {
   const totalWorkloadHours = mockTeamMembers.reduce((sum, member) => sum + member.workloadHours, 0)
   const utilization = totalCapacityHours > 0 ? Math.min(100, Math.round((totalWorkloadHours / totalCapacityHours) * 100)) : 0
   const overloadedMembers = mockTeamMembers.filter((member) => member.workloadHours > member.capacityHours)
+  const projectUtilization = utilization
   const daysRemaining = getDaysUntil(mockProject.deadline)
+  const projectTeam = mockTeamMembers
+  const topOverload = projectTeam.filter((m) => m.workloadHours > m.capacityHours)
   const activeSprint = sprints.find((sprint) => sprint.status === "active")
   const activeSprintCompleted = activeSprint?.tasks.filter((task) => task.status === "completed").length || 0
   const activeSprintProgress = activeSprint && activeSprint.tasks.length > 0
@@ -256,6 +272,31 @@ export default function ProjectDetailPage() {
       console.error("Error fetching baseline comparison:", error)
     }
   }, [projectId])
+
+  // Fetch governance data (risks, decisions, milestones)
+  const fetchGovernanceData = useCallback(async () => {
+    setIsLoadingGovernance(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/governance`)
+      if (res.ok) {
+        const data = await res.json()
+        setRisks(data.risks || [])
+        setDecisions(data.decisions || [])
+        setMilestones(data.milestones || [])
+      }
+    } catch (error) {
+      console.error("Error fetching governance data:", error)
+    } finally {
+      setIsLoadingGovernance(false)
+    }
+  }, [projectId])
+
+  // Load governance data on mount
+  useEffect(() => {
+    if (projectId) {
+      fetchGovernanceData()
+    }
+  }, [projectId, fetchGovernanceData])
 
   // Load data when changes tab is active
   useEffect(() => {
@@ -719,22 +760,22 @@ export default function ProjectDetailPage() {
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between text-sm text-gray-500">
                     <span>Utilization</span>
-                    <span className="font-medium text-gray-900">{utilization}%</span>
+                    <span className="font-medium text-gray-900">{projectUtilization}%</span>
                   </div>
-                  <Progress value={utilization} className="h-2" />
+                  <Progress value={projectUtilization} className="h-2" />
                   <div className="flex items-center gap-2 text-xs text-gray-600">
                     <Badge variant="outline">Capacity {totalCapacityHours}h</Badge>
                     <Badge variant={totalWorkloadHours > totalCapacityHours ? "destructive" : "secondary"}>
                       Load {totalWorkloadHours}h
                     </Badge>
                   </div>
-                  {overloadedMembers.length > 0 ? (
-                    <p className="text-xs text-amber-600">{overloadedMembers.length} teammate(s) over capacity</p>
+                  {topOverload.length > 0 ? (
+                    <p className="text-xs text-amber-600">{topOverload.length} teammate(s) over capacity</p>
                   ) : (
                     <p className="text-xs text-gray-500">All team members within capacity</p>
                   )}
                   <div className="divide-y rounded-lg border">
-                    {mockTeamMembers.slice(0, 3).map((member) => {
+                    {projectTeam.slice(0, 3).map((member) => {
                       const isOver = member.workloadHours > member.capacityHours
                       return (
                         <div key={member.id} className="flex items-center justify-between p-3">
@@ -751,6 +792,81 @@ export default function ProjectDetailPage() {
                         </div>
                       )
                     })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card className="md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle>Risks & Decisions</CardTitle>
+                  <CardDescription>Calls that can unblock the plan</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Top risks</p>
+                      <div className="divide-y rounded-lg border">
+                        {risks.length > 0 ? risks.map((risk) => (
+                          <div key={risk.id} className="p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{risk.title}</span>
+                              <Badge variant={risk.severity === "high" || risk.severity === "critical" ? "destructive" : "secondary"}>{risk.severity}</Badge>
+                            </div>
+                            <p className="text-xs text-gray-600">Owner: {risk.owner}</p>
+                            <p className="text-xs text-gray-500">{risk.impact}</p>
+                          </div>
+                        )) : (
+                          <div className="p-3 text-sm text-gray-500">No risks tracked yet</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Decisions</p>
+                      <div className="divide-y rounded-lg border">
+                        {decisions.length > 0 ? decisions.map((decision) => (
+                          <div key={decision.id} className="p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{decision.title}</span>
+                              {decision.due_date && <Badge variant="secondary">Due {formatDate(decision.due_date)}</Badge>}
+                            </div>
+                            <p className="text-xs text-gray-600">Owner: {decision.owner}</p>
+                            <p className="text-xs text-gray-500 capitalize">{decision.status}</p>
+                          </div>
+                        )) : (
+                          <div className="p-3 text-sm text-gray-500">No decisions pending</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle>Milestones</CardTitle>
+                  <CardDescription>Upcoming delivery checkpoints</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="divide-y rounded-lg border">
+                    {milestones.length > 0 ? milestones.map((milestone) => {
+                      const statusBadge = milestone.status === "at_risk" || milestone.status === "delayed" ? "destructive" :
+                                         milestone.status === "done" ? "success" : "secondary"
+                      return (
+                        <div key={milestone.id} className="p-3 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{milestone.name}</span>
+                            <Badge variant={statusBadge}>{milestone.status.replace("_", " ")}</Badge>
+                          </div>
+                          <p className="text-xs text-gray-500">Due {formatDate(milestone.due_date)}</p>
+                          <Progress value={milestone.progress} className="h-2" />
+                          <p className="text-xs text-gray-500">{milestone.progress}% complete</p>
+                        </div>
+                      )
+                    }) : (
+                      <div className="p-3 text-sm text-gray-500">No milestones defined yet</div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

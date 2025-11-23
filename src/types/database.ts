@@ -726,3 +726,51 @@ export interface WorkloadOptimizationResult {
     timeline_impact_days: number
   }
 }
+
+// Project Governance: Risks, Decisions, Milestones
+export interface ProjectRisk {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  owner: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  status: 'open' | 'mitigating' | 'closed'
+  impact: string
+  mitigation_plan?: string
+  due_date?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectDecision {
+  id: string
+  project_id: string
+  title: string
+  description?: string
+  owner: string
+  due_date?: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  rationale?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectMilestone {
+  id: string
+  project_id: string
+  name: string
+  description?: string
+  due_date: string
+  status: 'planned' | 'on_track' | 'at_risk' | 'delayed' | 'done'
+  progress_percentage: number
+  owner?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectGovernanceSnapshot {
+  risks: ProjectRisk[]
+  decisions: ProjectDecision[]
+  milestones: ProjectMilestone[]
+}

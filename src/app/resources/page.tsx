@@ -146,6 +146,11 @@ const CHART_COLORS = {
   "Docs Portal": { main: "#8b5cf6", light: "#a78bfa", dark: "#7c3aed" },
 }
 
+const TEAM_MEMBERS = ["Ava Chen", "Leo Park", "Maya Singh", "Noah Wright", "Emma Davis"] as const
+const PROJECT_KEYS = ["XPANDER MVP", "Mobile App", "API Integration", "Docs Portal"] as const
+type TeamMember = typeof TEAM_MEMBERS[number]
+type ProjectKey = typeof PROJECT_KEYS[number]
+
 // Custom tooltip component for better styling
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
   if (active && payload && payload.length) {
@@ -825,7 +830,7 @@ export default function ResourcesPage() {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>Total team hours per period</span>
+                      <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">Total hours / period</span>
                     </div>
                   </div>
                 </CardHeader>
@@ -834,9 +839,11 @@ export default function ResourcesPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={chartData.teamData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                        margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
+                        barCategoryGap="24%"
+                        barGap={4}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                        <CartesianGrid strokeDasharray="4 4" stroke="#f3f4f6" vertical={false} />
                         <XAxis
                           dataKey="period"
                           tick={{ fontSize: 12, fill: '#64748b' }}
@@ -852,47 +859,39 @@ export default function ResourcesPage() {
                           tickFormatter={(value) => `${value}h`}
                         />
                         <Tooltip
-                          cursor={{ fill: 'rgba(148, 163, 184, 0.1)' }}
-                          contentStyle={{
-                            backgroundColor: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                            padding: '12px'
-                          }}
-                          formatter={(value: number, name: string) => [`${value}h`, name]}
-                          labelStyle={{ fontWeight: 600, marginBottom: 4 }}
+                          content={<CustomTooltip />}
+                          cursor={{ fill: 'rgba(16, 185, 129, 0.06)' }}
                         />
                         <Legend
-                          wrapperStyle={{ paddingTop: 16 }}
-                          iconType="square"
+                          wrapperStyle={{ paddingTop: 12 }}
+                          iconType="circle"
                           iconSize={10}
                           formatter={(value) => <span style={{ color: '#475569', fontSize: 12, marginLeft: 4 }}>{value}</span>}
                         />
-                        <Bar dataKey="Ava Chen" stackId="team" fill="#22c55e" />
-                        <Bar dataKey="Leo Park" stackId="team" fill="#3b82f6" />
-                        <Bar dataKey="Maya Singh" stackId="team" fill="#f43f5e" />
-                        <Bar dataKey="Noah Wright" stackId="team" fill="#f59e0b" />
-                        <Bar dataKey="Emma Davis" stackId="team" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                        {TEAM_MEMBERS.map((name, idx) => (
+                          <Bar
+                            key={name}
+                            dataKey={name}
+                            stackId="team"
+                            fill={CHART_COLORS[name].main}
+                            fillOpacity={0.7}
+                            radius={idx === TEAM_MEMBERS.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                          />
+                        ))}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  {/* Summary Stats */}
                   <div className="grid grid-cols-5 gap-3 mt-4 pt-4 border-t">
-                    {[
-                      { name: "Ava Chen", color: "#22c55e", hours: 36 },
-                      { name: "Leo Park", color: "#3b82f6", hours: 26 },
-                      { name: "Maya Singh", color: "#f43f5e", hours: 45 },
-                      { name: "Noah Wright", color: "#f59e0b", hours: 22 },
-                      { name: "Emma Davis", color: "#8b5cf6", hours: 32 },
-                    ].map((member) => (
-                      <div key={member.name} className="text-center">
+                    {TEAM_MEMBERS.map((name) => (
+                      <div key={name} className="text-center">
                         <div className="flex items-center justify-center gap-1.5 mb-1">
-                          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: member.color }} />
-                          <span className="text-xs text-gray-500 truncate">{member.name.split(' ')[0]}</span>
+                          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: CHART_COLORS[name].main }} />
+                          <span className="text-xs text-gray-500 truncate">{name.split(' ')[0]}</span>
                         </div>
-                        <p className="text-lg font-semibold text-gray-800">{member.hours}h</p>
-                        <p className="text-xs text-gray-400">avg/week</p>
+                        <p className="text-lg font-semibold text-gray-800">
+                          {chartData.teamData[chartData.teamData.length - 1]?.[name] || 0}h
+                        </p>
+                        <p className="text-xs text-gray-400">latest period</p>
                       </div>
                     ))}
                   </div>
@@ -964,10 +963,10 @@ export default function ResourcesPage() {
                           iconSize={10}
                           formatter={(value) => <span style={{ color: '#475569', fontSize: 12, marginLeft: 4 }}>{value}</span>}
                         />
-                        <Area type="monotone" dataKey="XPANDER MVP" stackId="1" stroke="#22c55e" strokeWidth={2} fill="url(#gradXpander)" />
-                        <Area type="monotone" dataKey="Mobile App" stackId="1" stroke="#3b82f6" strokeWidth={2} fill="url(#gradMobile)" />
-                        <Area type="monotone" dataKey="API Integration" stackId="1" stroke="#f59e0b" strokeWidth={2} fill="url(#gradAPI)" />
-                        <Area type="monotone" dataKey="Docs Portal" stackId="1" stroke="#8b5cf6" strokeWidth={2} fill="url(#gradDocs)" />
+                        <Area type="monotone" dataKey="XPANDER MVP" stackId="1" stroke={CHART_COLORS["XPANDER MVP"].main} strokeWidth={2.5} fill={CHART_COLORS["XPANDER MVP"].light} fillOpacity={0.25} />
+                        <Area type="monotone" dataKey="Mobile App" stackId="1" stroke={CHART_COLORS["Mobile App"].main} strokeWidth={2.5} fill={CHART_COLORS["Mobile App"].light} fillOpacity={0.25} />
+                        <Area type="monotone" dataKey="API Integration" stackId="1" stroke={CHART_COLORS["API Integration"].main} strokeWidth={2.5} fill={CHART_COLORS["API Integration"].light} fillOpacity={0.25} />
+                        <Area type="monotone" dataKey="Docs Portal" stackId="1" stroke={CHART_COLORS["Docs Portal"].main} strokeWidth={2.5} fill={CHART_COLORS["Docs Portal"].light} fillOpacity={0.25} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -995,7 +994,7 @@ export default function ResourcesPage() {
 
             {/* Utilization Trend Chart */}
             {chartView === "utilization" && (
-              <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50/50">
+              <Card className="shadow-lg border bg-white">
                 <CardHeader>
                   <CardTitle className="text-lg">Team Utilization Trend</CardTitle>
                   <CardDescription>Overall team utilization percentage over time</CardDescription>
@@ -1005,10 +1004,6 @@ export default function ResourcesPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData.utilizationData}>
                         <defs>
-                          <linearGradient id="gradUtilization" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4} />
-                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
-                          </linearGradient>
                           <filter id="glow">
                             <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
                             <feMerge>
@@ -1051,7 +1046,8 @@ export default function ResourcesPage() {
                           dataKey="utilization"
                           stroke="#3b82f6"
                           strokeWidth={3}
-                          fill="url(#gradUtilization)"
+                          fill="#3b82f6"
+                          fillOpacity={0.12}
                           dot={{ fill: '#fff', stroke: '#3b82f6', strokeWidth: 2, r: 5 }}
                           activeDot={{ r: 7, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2, filter: 'url(#glow)' }}
                           name="Utilization"
@@ -1186,7 +1182,7 @@ export default function ResourcesPage() {
                     <p className="text-sm font-medium text-gray-700">Individual Utilization</p>
                     <ScrollArea className="h-[300px] pr-4">
                       <div className="space-y-3">
-                        {mockResources
+                        {[...mockResources]
                           .sort((a, b) => (b.assigned / b.capacity) - (a.assigned / a.capacity))
                           .map((resource) => {
                             const utilization = resource.capacity > 0 ? Math.round((resource.assigned / resource.capacity) * 100) : 0
