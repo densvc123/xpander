@@ -420,6 +420,7 @@ export default function ReportsPage() {
   const [savedReports, setSavedReports] = useState(mockReports)
   const [customPrompt, setCustomPrompt] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [showRebalanceHints, setShowRebalanceHints] = useState(true)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
 
@@ -448,6 +449,23 @@ export default function ReportsPage() {
       }
     }
     fetchProjects()
+  }, [])
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch("/api/settings")
+        if (!res.ok) return
+        const data = await res.json()
+        const s = data.settings
+        if (typeof s?.ai_show_rebalance_hints === "boolean") {
+          setShowRebalanceHints(s.ai_show_rebalance_hints)
+        }
+      } catch {
+        // ignore; keep default hints visible
+      }
+    }
+    void loadSettings()
   }, [])
 
   const getCopyContent = () => {
@@ -683,10 +701,12 @@ export default function ReportsPage() {
                 )}
                 <span className="text-gray-500">• {mockWorkloadSummary.availableCount} with capacity</span>
               </div>
-              <Button variant="outline" size="sm">
-                <Sparkles className="h-4 w-4 mr-2" />
-                Ask AI to rebalance
-              </Button>
+              {showRebalanceHints && (
+                <Button variant="outline" size="sm">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Ask AI to rebalance
+                </Button>
+              )}
             </CardContent>
           </Card>
 

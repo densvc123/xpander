@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateAIResponse } from '@/lib/openai'
 import { AI_PROMPTS } from '@/lib/ai-prompts'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,12 +20,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Try to refine capacity / sprint length based on user defaults
+    let effectiveWeeklyCapacity = weeklyCapacity
+    let effectiveSprintLength = sprintLength
+    try {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: settings } = await supabase
+          .from('users')
+          .select('weekly_capacity_hours, default_sprint_length_days')
+          .eq('id', user.id)
+          .single()
+
+        if (settings?.weekly_capacity_hours) {
+          effectiveWeeklyCapacity = settings.weekly_capacity_hours
+        }
+        if (settings?.default_sprint_length_days) {
+          effectiveSprintLength = settings.default_sprint_length_days
+        }
+      }
+    } catch (settingsError) {
+      console.warn('Unable to load sprint planning defaults:', settingsError)
+    }
+
     const userPrompt = `
 Planning Constraints:
 - Start Date: ${startDate || new Date().toISOString().split('T')[0]}
 - Target Deadline: ${deadline || 'Flexible'}
-- Weekly Capacity: ${weeklyCapacity} hours
-- Preferred Sprint Length: ${sprintLength} days
+- Weekly Capacity: ${effectiveWeeklyCapacity} hours
+- Preferred Sprint Length: ${effectiveSprintLength} days
 
 Tasks to Plan:
 ${JSON.stringify(tasks, null, 2)}

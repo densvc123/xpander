@@ -212,6 +212,80 @@ export default function ProjectDetailPage() {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([])
   const [, setIsLoadingGovernance] = useState(false)
 
+  // Project resources & workload state
+  type ProjectResourceWithWorkload = {
+    id: string
+    name: string
+    role: string | null
+    weekly_capacity_hours: number
+    total_assigned_hours: number
+    completed_hours: number
+    remaining_hours: number
+    utilization_percentage: number
+    workload_level: "underloaded" | "optimal" | "heavy" | "overloaded"
+    assigned_task_count: number
+  }
+
+  type ProjectResourceTeamSummary = {
+    total_team_capacity: number
+    total_assigned_hours: number
+    team_utilization_percentage: number
+    overallocated_resources: number
+    underutilized_resources: number
+  }
+
+  type WorkloadOptimizationIssue = {
+    issue: string
+    severity: "low" | "medium" | "high" | "critical"
+    affected_resources: string[]
+  }
+
+  type WorkloadOptimizationChange = {
+    task_id: string
+    task_title: string
+    current_assignee: string | null
+    recommended_assignee: string
+    reason: string
+    hours_to_reassign: number
+  }
+
+  type WorkloadOptimizationSprintAdjustment = {
+    sprint_id: string
+    sprint_name: string
+    current_load: number
+    recommended_load: number
+    tasks_to_move: string[]
+  }
+
+  type WorkloadOptimizationProjected = {
+    before_utilization: number
+    after_utilization: number
+    overload_reduction: number
+    timeline_impact_days: number
+  }
+
+  type WorkloadOptimization = {
+    summary: string
+    current_issues: WorkloadOptimizationIssue[]
+    recommended_changes: WorkloadOptimizationChange[]
+    sprint_adjustments: WorkloadOptimizationSprintAdjustment[]
+    projected_improvement: WorkloadOptimizationProjected
+  }
+
+  const [projectResources, setProjectResources] = useState<ProjectResourceWithWorkload[]>([])
+  const [resourceTeamSummary, setResourceTeamSummary] = useState<ProjectResourceTeamSummary | null>(null)
+  const [isLoadingResources, setIsLoadingResources] = useState(false)
+  const [resourcesError, setResourcesError] = useState<string | null>(null)
+  const [isOptimizingWorkload, setIsOptimizingWorkload] = useState(false)
+  const [workloadOptimization, setWorkloadOptimization] = useState<WorkloadOptimization | null>(null)
+  const [clearingResourceId, setClearingResourceId] = useState<string | null>(null)
+  const [isCreatingResource, setIsCreatingResource] = useState(false)
+  const [newResourceForm, setNewResourceForm] = useState({
+    name: "",
+    role: "",
+    weekly_capacity_hours: 40
+  })
+
   const totalTasks = sprints.reduce((sum, sprint) => sum + sprint.tasks.length, 0)
   const completedTasks = sprints.reduce(
     (sum, sprint) => sum + sprint.tasks.filter((task) => task.status === "completed").length,
@@ -244,6 +318,136 @@ export default function ProjectDetailPage() {
       return bRank - aRank
     })[0]
   }, [risks])
+
+  const [showRebalanceHints, setShowRebalanceHints] = useState(true)
+
+  const loadProjectResources = useCallback(async () => {
+    if (!projectId) return
+    setIsLoadingResources(true)
+    setResourcesError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/resources`)
+      if (!res.ok) {
+        setResourcesError("Could not load project resources.")
+        return
+      }
+      const data = await res.json()
+      setProjectResources(data.resources || [])
+      setResourceTeamSummary(data.team_summary || null)
+    } catch (error) {
+      console.error("Error loading project resources:", error)
+      setResourcesError("Unexpected error while loading resources.")
+    } finally {
+      setIsLoadingResources(false)
+    }
+  }, [projectId])
+
+  const handleOptimizeWorkload = useCallback(async () => {
+    if (!projectId) return
+    setIsOptimizingWorkload(true)
+    setResourcesError(null)
+    try {
+      const res = await fetch("/api/ai/optimize-workload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId })
+      })
+
+      if (!res.ok) {
+        setResourcesError("AI optimization is not available for this project yet.")
+        return
+      }
+
+      const data = await res.json()
+      setWorkloadOptimization(data.optimization || null)
+    } catch (error) {
+      console.error("Error optimizing workload:", error)
+      setResourcesError("Failed to run AI workload optimization.")
+    } finally {
+      setIsOptimizingWorkload(false)
+    }
+  }, [projectId])
+
+  const handleCreateResource = useCallback(async () => {
+    if (!projectId || !newResourceForm.name.trim()) return
+    setIsCreatingResource(true)
+    setResourcesError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/resources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newResourceForm.name.trim(),
+          role: newResourceForm.role.trim() || null,
+          weekly_capacity_hours: newResourceForm.weekly_capacity_hours || 40
+        })
+      })
+
+      if (!res.ok) {
+        setResourcesError("Could not create a new resource for this project.")
+        return
+      }
+
+      setNewResourceForm({ name: "", role: "", weekly_capacity_hours: 40 })
+      loadProjectResources()
+    } catch (error) {
+      console.error("Error creating resource:", error)
+      setResourcesError("Failed to create resource.")
+    } finally {
+      setIsCreatingResource(false)
+    }
+  }, [projectId, newResourceForm, loadProjectResources])
+
+  const handleClearAssignmentsForResource = useCallback(
+    async (resourceId: string) => {
+      if (!projectId) return
+      setClearingResourceId(resourceId)
+      setResourcesError(null)
+      try {
+        const res = await fetch(`/api/projects/${projectId}/resources/allocations`)
+        if (!res.ok) {
+          setResourcesError("Could not load current allocations for this project.")
+          return
+        }
+        const data = await res.json()
+        const allocation = (data.allocations || []).find(
+          (a: { resource_id: string }) => a.resource_id === resourceId
+        )
+
+        if (!allocation) {
+          return
+        }
+
+        const tasks: { task_id: string }[] = [
+          ...(allocation.sprint_allocations || []).flatMap(
+            (s: { tasks: { task_id: string }[] }) => s.tasks || []
+          ),
+          ...(allocation.unassigned_tasks || [])
+        ]
+
+        await Promise.all(
+          tasks.map((task) =>
+            fetch(`/api/projects/${projectId}/resources/allocations`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                task_id: task.task_id,
+                resource_id: resourceId
+              })
+            })
+          )
+        )
+
+        await loadProjectResources()
+      } catch (error) {
+        console.error("Error clearing assignments:", error)
+        setResourcesError("Failed to remove this resource from the project.")
+      } finally {
+        setClearingResourceId(null)
+      }
+    },
+    [projectId, loadProjectResources]
+  )
 
   // Fetch change requests
   const fetchChangeRequests = useCallback(async () => {
@@ -311,6 +515,31 @@ export default function ProjectDetailPage() {
       fetchGovernanceData()
     }
   }, [projectId, fetchGovernanceData])
+
+  // Load project resources when Resources tab is active
+  useEffect(() => {
+    if (activeTab === "resources" && projectId) {
+      loadProjectResources()
+    }
+  }, [activeTab, projectId, loadProjectResources])
+
+  // Load AI hint preference
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch("/api/settings")
+        if (!res.ok) return
+        const data = await res.json()
+        const s = data.settings
+        if (typeof s?.ai_show_rebalance_hints === "boolean") {
+          setShowRebalanceHints(s.ai_show_rebalance_hints)
+        }
+      } catch {
+        // ignore; keep default
+      }
+    }
+    void loadSettings()
+  }, [])
 
   // Load data when changes tab is active
   useEffect(() => {
@@ -609,10 +838,11 @@ export default function ProjectDetailPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-7">
+            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-8">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="timeline">Plan</TabsTrigger>
               <TabsTrigger value="sprints">Sprints</TabsTrigger>
+              <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="requirements">Requirements</TabsTrigger>
               <TabsTrigger value="changes">Changes</TabsTrigger>
               <TabsTrigger value="advisor">AI Advisor</TabsTrigger>
@@ -767,12 +997,14 @@ export default function ProjectDetailPage() {
                       <FileText className="h-4 w-4 mr-2" />
                       Refine requirements with AI
                     </Button>
-                    <Link href="/resources">
-                      <Button variant="outline" className="justify-start w-full">
-                        <Users className="h-4 w-4 mr-2" />
-                        Resource planning
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="outline"
+                      className="justify-start"
+                      onClick={() => setActiveTab("resources")}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      Resource planning
+                    </Button>
                     <Button variant="outline" className="justify-start" onClick={() => setActiveTab("changes")}>
                       <GitPullRequest className="h-4 w-4 mr-2" />
                       Review change requests
@@ -900,6 +1132,352 @@ export default function ProjectDetailPage() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Resources Tab */}
+          <TabsContent value="resources" className="space-y-6">
+            <Card>
+              <CardHeader className="pb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <CardTitle>Project team & workload</CardTitle>
+                  <CardDescription>
+                    See who is working on this project, how loaded they are, and where AI suggests rebalancing.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Users className="h-4 w-4 mr-2" />
+                        Add team member
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[420px]">
+                      <DialogHeader>
+                        <DialogTitle>Add team member</DialogTitle>
+                        <DialogDescription>
+                          Create a new resource in your pool and make them available for this and other projects.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="resource-name">Name</Label>
+                          <Input
+                            id="resource-name"
+                            placeholder="e.g., Maya Singh"
+                            value={newResourceForm.name}
+                            onChange={(e) =>
+                              setNewResourceForm((prev) => ({ ...prev, name: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="resource-role">Role</Label>
+                          <Input
+                            id="resource-role"
+                            placeholder="e.g., Backend Engineer"
+                            value={newResourceForm.role}
+                            onChange={(e) =>
+                              setNewResourceForm((prev) => ({ ...prev, role: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="resource-capacity">Weekly capacity (hours)</Label>
+                          <Input
+                            id="resource-capacity"
+                            type="number"
+                            min={1}
+                            max={80}
+                            value={newResourceForm.weekly_capacity_hours}
+                            onChange={(e) =>
+                              setNewResourceForm((prev) => ({
+                                ...prev,
+                                weekly_capacity_hours: Number(e.target.value) || 40
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          onClick={handleCreateResource}
+                          disabled={isCreatingResource || !newResourceForm.name.trim()}
+                        >
+                          {isCreatingResource ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Saving…
+                            </>
+                          ) : (
+                            "Add resource"
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                  {showRebalanceHints && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleOptimizeWorkload}
+                      disabled={isOptimizingWorkload}
+                    >
+                      {isOptimizingWorkload ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Running AI optimization…
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Ask AI to rebalance
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {resourcesError && (
+                  <p className="text-sm text-red-600">{resourcesError}</p>
+                )}
+                {isLoadingResources ? (
+                  <p className="text-sm text-gray-500">Loading project resources…</p>
+                ) : projectResources.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    No team members are connected to this project yet. Once you start assigning tasks to resources,
+                    they will appear here with their capacity and workload.
+                  </p>
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-lg border p-3">
+                        <p className="text-xs text-gray-500">Team utilization</p>
+                        <p className="text-lg font-semibold">
+                          {resourceTeamSummary?.team_utilization_percentage ?? projectUtilization}%
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {resourceTeamSummary
+                            ? `${resourceTeamSummary.total_assigned_hours}h / ${resourceTeamSummary.total_team_capacity}h assigned`
+                            : "Based on estimated hours vs team capacity"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <p className="text-xs text-gray-500">Overloaded</p>
+                        <p className="text-lg font-semibold">
+                          {resourceTeamSummary?.overallocated_resources ?? topOverload.length}
+                        </p>
+                        <p className="text-xs text-gray-500">Team members above healthy load</p>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <p className="text-xs text-gray-500">Underutilized</p>
+                        <p className="text-lg font-semibold">
+                          {resourceTeamSummary?.underutilized_resources ?? 0}
+                        </p>
+                        <p className="text-xs text-gray-500">Team members with spare capacity</p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-900">Allocated to this project</p>
+                          <p className="text-xs text-gray-500">
+                            {projectResources.filter(r => r.assigned_task_count > 0).length} with tasks
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          {projectResources
+                            .filter(r => r.assigned_task_count > 0)
+                            .map((resource) => (
+                              <div
+                                key={resource.id}
+                                className="rounded-lg border p-3 flex flex-col gap-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium text-sm text-gray-900">{resource.name}</p>
+                                    <p className="text-xs text-gray-500">{resource.role || "Unspecified role"}</p>
+                                  </div>
+                                  <Badge
+                                    variant={
+                                      resource.workload_level === "overloaded"
+                                        ? "destructive"
+                                        : resource.workload_level === "heavy"
+                                        ? "warning"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {resource.utilization_percentage}%
+                                  </Badge>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs text-gray-500">
+                                    <span>Load</span>
+                                    <span>
+                                      {resource.total_assigned_hours}h / {resource.weekly_capacity_hours}h
+                                    </span>
+                                  </div>
+                                  <Progress
+                                    value={Math.min(resource.utilization_percentage, 130)}
+                                    className="h-2"
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs text-gray-500">
+                                    {resource.assigned_task_count} task
+                                    {resource.assigned_task_count === 1 ? "" : "s"} linked to this project.
+                                  </p>
+                                  <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    className="text-[11px]"
+                                    onClick={() => handleClearAssignmentsForResource(resource.id)}
+                                    disabled={clearingResourceId === resource.id}
+                                  >
+                                    {clearingResourceId === resource.id ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                        Removing…
+                                      </>
+                                    ) : (
+                                      "Remove from project"
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          {projectResources.filter(r => r.assigned_task_count > 0).length === 0 && (
+                            <p className="text-xs text-gray-500">
+                              No one is currently assigned to tasks in this project. Start assigning work from the Sprints
+                              tab to see workload here.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-900">Available in your portfolio</p>
+                          <p className="text-xs text-gray-500">
+                            Resources with no current tasks in this project
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          {projectResources
+                            .filter(r => r.assigned_task_count === 0)
+                            .map((resource) => (
+                              <div
+                                key={resource.id}
+                                className="rounded-lg border p-3 flex items-center justify-between"
+                              >
+                                <div>
+                                  <p className="font-medium text-sm text-gray-900">{resource.name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {resource.role || "Unspecified role"} • {resource.weekly_capacity_hours}h/week
+                                  </p>
+                                </div>
+                                <Badge variant="outline" className="text-[11px]">
+                                  Not allocated
+                                </Badge>
+                              </div>
+                            ))}
+                          {projectResources.filter(r => r.assigned_task_count === 0).length === 0 && (
+                            <p className="text-xs text-gray-500">
+                              All available resources are already working on this project.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {workloadOptimization && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle>AI workload recommendations</CardTitle>
+                  <CardDescription>
+                    Suggestions to reduce overload and use available capacity more effectively. These are advisory only – no changes are applied automatically.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-700">{workloadOptimization.summary}</p>
+                  </div>
+                  {workloadOptimization.current_issues.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-700">Key workload issues</p>
+                      <ul className="space-y-1">
+                        {workloadOptimization.current_issues.map((issue, idx) => (
+                          <li key={idx} className="text-xs text-gray-700">
+                            <span className="font-medium capitalize">{issue.severity}</span>: {issue.issue}{" "}
+                            {issue.affected_resources.length > 0 && (
+                              <span className="text-gray-500">
+                                ({issue.affected_resources.join(", ")})
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {workloadOptimization.recommended_changes.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-700">Suggested task reassignments</p>
+                      <div className="space-y-2 text-xs text-gray-700">
+                        {workloadOptimization.recommended_changes.map((change) => (
+                          <div key={change.task_id} className="rounded-md border p-2">
+                            <p className="font-medium text-gray-900 text-xs">{change.task_title}</p>
+                            <p className="mt-0.5">
+                              Move{" "}
+                              <span className="font-semibold">
+                                {change.hours_to_reassign}h
+                              </span>{" "}
+                              from{" "}
+                              <span className="font-semibold">
+                                {change.current_assignee || "Unassigned"}
+                              </span>{" "}
+                              to{" "}
+                              <span className="font-semibold">
+                                {change.recommended_assignee}
+                              </span>
+                              .
+                            </p>
+                            <p className="mt-0.5 text-gray-500">{change.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid gap-3 md:grid-cols-3 text-xs text-gray-700">
+                    <div className="rounded-lg border p-2">
+                      <p className="text-[11px] text-gray-500">Team utilization</p>
+                      <p className="mt-1 font-semibold">
+                        {workloadOptimization.projected_improvement.before_utilization}% →{" "}
+                        {workloadOptimization.projected_improvement.after_utilization}%
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-2">
+                      <p className="text-[11px] text-gray-500">Overload reduction</p>
+                      <p className="mt-1 font-semibold">
+                        {workloadOptimization.projected_improvement.overload_reduction}{" "}
+                        fewer overloaded resources
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-2">
+                      <p className="text-[11px] text-gray-500">Timeline impact</p>
+                      <p className="mt-1 font-semibold">
+                        {workloadOptimization.projected_improvement.timeline_impact_days} days improvement (estimate)
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Requirements Tab */}
@@ -1093,12 +1671,13 @@ Example:
                 </p>
                 <p className="text-xs text-gray-500">Drag tasks between sprints to fine-tune scope and load.</p>
               </div>
-              <Link href="/resources">
-                <Button variant="outline">
-                  <Users className="h-4 w-4 mr-2" />
-                  Resource Planning
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                onClick={() => setActiveTab("resources")}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                Resource Planning
+              </Button>
             </div>
             <div className="space-y-4">
               {sprints.map((sprint) => {

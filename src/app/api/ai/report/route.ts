@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateAIResponse } from '@/lib/openai'
 import { AI_PROMPTS } from '@/lib/ai-prompts'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,9 +36,29 @@ export async function POST(request: NextRequest) {
         reportInstructions = 'Generate a project status report.'
     }
 
+    // Load user settings to adjust tone if available
+    let reportTone: 'internal' | 'client' = 'internal'
+    try {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: settings } = await supabase
+          .from('users')
+          .select('ai_report_tone')
+          .eq('id', user.id)
+          .single()
+        if (settings?.ai_report_tone === 'client') {
+          reportTone = 'client'
+        }
+      }
+    } catch (settingsError) {
+      console.warn('Unable to load report tone preference:', settingsError)
+    }
+
     const userPrompt = `
 Report Type: ${reportType}
 Instructions: ${reportInstructions}
+Audience / tone: ${reportTone === 'client' ? 'Client-facing, executive-ready language suitable for stakeholders.' : 'Internal team status update tone, direct and pragmatic.'}
 
 Project Data:
 ${JSON.stringify(projectData, null, 2)}

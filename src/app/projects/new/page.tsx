@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { MainLayout } from "@/components/layout/main-layout"
@@ -317,6 +317,7 @@ export default function NewProjectWizard() {
   const [sprintLengthWeeks, setSprintLengthWeeks] = useState(2)
   const [pace, setPace] = useState<"conservative" | "normal" | "aggressive">("normal")
   const [teamPreset, setTeamPreset] = useState<TeamPreset>("small")
+  const [autoAISuggestions, setAutoAISuggestions] = useState(true)
 
   const currentStepIndex = steps.findIndex((s) => s.id === activeStep)
   const totalHours = useMemo(() => tasks.reduce((sum, task) => sum + (task.estimated_hours || 0), 0), [tasks])
@@ -387,7 +388,11 @@ export default function NewProjectWizard() {
 
   const nextStep = () => {
     if (currentStepIndex < steps.length - 1) {
-      setActiveStep(steps[currentStepIndex + 1].id)
+      const nextId = steps[currentStepIndex + 1].id
+      setActiveStep(nextId)
+      if (nextId === "analysis" && autoAISuggestions && !analysis && !isLoading.analysis) {
+        void runAnalysis()
+      }
     }
   }
 
@@ -614,6 +619,38 @@ export default function NewProjectWizard() {
     setAssignments(newAssignments)
     setStatusMessage("Resources auto-allocated; you can review or adjust before saving.")
   }
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch("/api/settings")
+        if (!res.ok) return
+        const data = await res.json()
+        const s = data.settings
+
+        if (typeof s?.ai_use_wizard_suggestions === "boolean") {
+          setAutoAISuggestions(s.ai_use_wizard_suggestions)
+        }
+
+        const defaultSprintLengthDays = s?.default_sprint_length_days ?? 14
+        const weeks = Math.max(1, Math.min(3, Math.round(defaultSprintLengthDays / 7)))
+        setSprintLengthWeeks(weeks)
+
+        if (typeof s?.weekly_capacity_hours === "number") {
+          setResources((prev) =>
+            prev.map((r) =>
+              r.id === "res-1"
+                ? { ...r, weekly_capacity_hours: s.weekly_capacity_hours }
+                : r
+            )
+          )
+        }
+      } catch (error) {
+        console.warn("Unable to load wizard defaults:", error)
+      }
+    }
+    void loadSettings()
+  }, [])
 
   const saveProject = async () => {
     setIsLoading((prev) => ({ ...prev, saving: true }))

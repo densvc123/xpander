@@ -11,6 +11,12 @@ CREATE TABLE IF NOT EXISTS users (
   full_name TEXT,
   avatar_url TEXT,
   weekly_capacity_hours INTEGER DEFAULT 40,
+  timezone TEXT,
+  default_sprint_length_days INTEGER DEFAULT 14 CHECK (default_sprint_length_days >= 1 AND default_sprint_length_days <= 28),
+  default_work_hours_per_day INTEGER DEFAULT 8 CHECK (default_work_hours_per_day >= 1 AND default_work_hours_per_day <= 24),
+  ai_use_wizard_suggestions BOOLEAN DEFAULT TRUE,
+  ai_show_rebalance_hints BOOLEAN DEFAULT TRUE,
+  ai_report_tone TEXT DEFAULT 'internal' CHECK (ai_report_tone IN ('internal', 'client')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
