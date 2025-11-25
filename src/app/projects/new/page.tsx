@@ -693,44 +693,150 @@ export default function NewProjectWizard() {
           Back to Projects
         </Link>
 
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle>Wizard Progress</CardTitle>
-            <CardDescription>Requirements → AI Analysis → Sprints & Tasks → Plan & Resources</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-4">
-              {steps.map((step, idx) => {
-                const state = idx < currentStepIndex ? "done" : idx === currentStepIndex ? "current" : "upcoming"
-                return (
-                  <div
-                    key={step.id}
-                    className={cn(
-                      "rounded-xl border p-3 flex items-start gap-3",
-                      state === "current" && "border-blue-200 bg-blue-50",
-                      state === "done" && "border-emerald-200 bg-emerald-50"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "h-8 w-8 flex items-center justify-center rounded-full text-sm font-semibold",
-                        state === "done" && "bg-emerald-500 text-white",
-                        state === "current" && "bg-blue-600 text-white",
-                        state === "upcoming" && "bg-gray-100 text-gray-500"
-                      )}
-                    >
-                      {state === "done" ? <Check className="h-4 w-4" /> : idx + 1}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-gray-900">{step.title}</div>
-                      <div className="text-sm text-gray-500">{step.description}</div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="border-y border-gray-200">
+          <nav
+            aria-label="Wizard progress"
+            className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8"
+          >
+            <ol
+              role="list"
+              className="overflow-hidden rounded-md md:flex md:rounded-none md:border-x md:border-gray-200"
+            >
+                  {steps.map((step, idx) => {
+                    const state = idx < currentStepIndex ? "complete" : idx === currentStepIndex ? "current" : "upcoming"
+                    const isFirst = idx === 0
+                    const isLast = idx === steps.length - 1
+                    const stepId = `0${idx + 1}`
+
+                    return (
+                      <li key={step.id} className="relative overflow-hidden md:flex-1">
+                        <div
+                          className={cn(
+                            isFirst ? "rounded-t-md border-b-0 md:rounded-none" : "",
+                            isLast ? "rounded-b-md border-t-0 md:rounded-none" : "",
+                            "overflow-hidden border border-gray-200 md:border-0"
+                          )}
+                        >
+                          {/* Completed */}
+                          {state === "complete" && (
+                            <div className="group">
+                              <span
+                                aria-hidden="true"
+                                className="absolute top-0 left-0 h-full w-1 bg-transparent group-hover:bg-gray-200 md:top-auto md:bottom-0 md:h-1 md:w-full"
+                              />
+                              <span
+                                className={cn(
+                                  !isFirst && "md:pl-9",
+                                  "flex items-start px-6 py-4 text-sm font-medium"
+                                )}
+                              >
+                                <span className="shrink-0">
+                                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600">
+                                    <Check className="h-5 w-5 text-white" aria-hidden="true" />
+                                  </span>
+                                </span>
+                                <span className="ml-4 mt-0.5 flex min-w-0 flex-col">
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {step.title}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {step.description}
+                                  </span>
+                                </span>
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Current */}
+                          {state === "current" && (
+                            <div aria-current="step">
+                              <span
+                                aria-hidden="true"
+                                className="absolute top-0 left-0 h-full w-1 bg-blue-600 md:top-auto md:bottom-0 md:h-1 md:w-full"
+                              />
+                              <span
+                                className={cn(
+                                  !isFirst && "md:pl-9",
+                                  "flex items-start px-6 py-4 text-sm font-medium"
+                                )}
+                              >
+                                <span className="shrink-0">
+                                  <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-blue-600">
+                                    <span className="text-blue-600 text-xs font-semibold">
+                                      {stepId}
+                                    </span>
+                                  </span>
+                                </span>
+                                <span className="ml-4 mt-0.5 flex min-w-0 flex-col">
+                                  <span className="text-sm font-medium text-blue-600">
+                                    {step.title}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {step.description}
+                                  </span>
+                                </span>
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Upcoming */}
+                          {state === "upcoming" && (
+                            <div className="group">
+                              <span
+                                aria-hidden="true"
+                                className="absolute top-0 left-0 h-full w-1 bg-transparent group-hover:bg-gray-200 md:top-auto md:bottom-0 md:h-1 md:w-full"
+                              />
+                              <span
+                                className={cn(
+                                  !isFirst && "md:pl-9",
+                                  "flex items-start px-6 py-4 text-sm font-medium"
+                                )}
+                              >
+                                <span className="shrink-0">
+                                  <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300">
+                                    <span className="text-xs text-gray-500 font-semibold">
+                                      {stepId}
+                                    </span>
+                                  </span>
+                                </span>
+                                <span className="ml-4 mt-0.5 flex min-w-0 flex-col">
+                                  <span className="text-sm font-medium text-gray-500">
+                                    {step.title}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {step.description}
+                                  </span>
+                                </span>
+                              </span>
+                            </div>
+                          )}
+
+                          {!isFirst && (
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-0 top-0 left-0 hidden w-3 md:block"
+                            >
+                              <svg
+                                fill="none"
+                                viewBox="0 0 12 82"
+                                preserveAspectRatio="none"
+                                className="h-full w-full text-gray-300"
+                              >
+                                <path
+                                  d="M0.5 0V31L10.5 41L0.5 51V82"
+                                  stroke="currentcolor"
+                                  vectorEffect="non-scaling-stroke"
+                                />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </nav>
+        </div>
 
         {activeStep === "requirements" && (
           <Card>

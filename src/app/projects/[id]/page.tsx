@@ -173,7 +173,7 @@ export default function ProjectDetailPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [advisorInput, setAdvisorInput] = useState("")
   const [messages, setMessages] = useState<Message[]>(mockMessages)
-  const [timelineView, setTimelineView] = useState<"list" | "calendar">("list")
+  const [timelineView, setTimelineView] = useState<"sprints" | "timeline">("sprints")
   const [requirementsAnalysis, setRequirementsAnalysis] = useState<RequirementsAnalysis | null>(null)
   const [hasCreatedSprintPlan, setHasCreatedSprintPlan] = useState(false)
   const [sprints, setSprints] = useState(initialSprints)
@@ -838,10 +838,9 @@ export default function ProjectDetailPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-8">
+            <TabsList className="inline-flex w-max md:w-auto md:grid md:grid-cols-7">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="timeline">Plan</TabsTrigger>
-              <TabsTrigger value="sprints">Sprints</TabsTrigger>
+              <TabsTrigger value="plan-sprints">Plan &amp; Sprints</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="requirements">Requirements</TabsTrigger>
               <TabsTrigger value="changes">Changes</TabsTrigger>
@@ -985,11 +984,11 @@ export default function ProjectDetailPage() {
                   </div>
                   <p className="text-xs text-gray-500">Suggested next steps</p>
                   <div className="grid gap-2">
-                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("timeline")}>
+                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("plan-sprints")}>
                       <BarChart3 className="h-4 w-4 mr-2" />
-                      Review plan & timeline
+                      Review plan & sprints
                     </Button>
-                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("sprints")}>
+                    <Button variant="outline" className="justify-start" onClick={() => setActiveTab("plan-sprints")}>
                       <ListTodo className="h-4 w-4 mr-2" />
                       Finalize sprint scope
                     </Button>
@@ -1644,7 +1643,7 @@ Example:
                         className="w-full"
                         onClick={() => {
                           setHasCreatedSprintPlan(true)
-                          setActiveTab("sprints")
+                          setActiveTab("plan-sprints")
                         }}
                       >
                         Create sprint plan
@@ -1661,193 +1660,12 @@ Example:
             ) : null}
           </TabsContent>
 
-          {/* Sprints Tab */}
-          <TabsContent value="sprints" className="space-y-6">
+          {/* Plan & Sprints Tab */}
+          <TabsContent value="plan-sprints" className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Sprints</h3>
-                <p className="text-sm text-gray-500">
-                  {sprints.length} sprints • {totalTasks} tasks ({sprintCounts.active} active / {sprintCounts.planned} upcoming)
-                </p>
-                <p className="text-xs text-gray-500">Drag tasks between sprints to fine-tune scope and load.</p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setActiveTab("resources")}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Resource Planning
-              </Button>
-            </div>
-            <div className="space-y-4">
-              {sprints.map((sprint) => {
-                const completedTasks = sprint.tasks.filter((task) => task.status === "completed").length
-                const progress = sprint.tasks.length > 0 ? Math.round((completedTasks / sprint.tasks.length) * 100) : 0
-
-                return (
-                  <Card
-                    key={sprint.id}
-                    className={`${sprint.status === "active" ? "ring-2 ring-emerald-500" : ""} ${dragOverSprintId === sprint.id ? "border-2 border-dashed border-emerald-400" : ""}`}
-                    onDragOver={(e) => handleTaskDragOver(e, sprint.id)}
-                    onDragLeave={handleTaskDragLeave}
-                    onDrop={(e) => handleTaskDrop(e, sprint.id)}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-base">{sprint.name}</CardTitle>
-                          <CardDescription>
-                            {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
-                          </CardDescription>
-                          <div className="mt-3 space-y-1">
-                            <div className="flex items-center justify-between text-sm text-gray-500">
-                              <span>{progress}% complete</span>
-                              <span>{completedTasks}/{sprint.tasks.length} tasks</span>
-                            </div>
-                            <Progress value={progress} className="h-2" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={
-                            sprint.status === "completed" ? "success" :
-                            sprint.status === "active" ? "default" : "secondary"
-                          }>
-                            {sprint.status}
-                          </Badge>
-                          <Button variant="outline" size="sm" onClick={() => openAddTaskDialog(sprint.id)}>
-                            Add Task
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span>Drag to reorder or move to another sprint</span>
-                          <span>{completedTasks}/{sprint.tasks.length} done</span>
-                        </div>
-                        <div className="divide-y rounded-lg border">
-                          {sprint.tasks.map((task) => (
-                            <div
-                              key={task.id}
-                              className="flex items-center justify-between p-4 cursor-grab"
-                              draggable
-                              onDragStart={() => handleTaskDragStart(task.id, sprint.id)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`p-1 rounded ${
-                                  task.status === "completed" ? "bg-emerald-100" :
-                                  task.status === "in_progress" ? "bg-blue-100" : "bg-gray-100"
-                                }`}>
-                                  {task.status === "completed" ? (
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                                  ) : task.status === "in_progress" ? (
-                                    <Play className="h-4 w-4 text-blue-600" />
-                                  ) : (
-                                    <Clock className="h-4 w-4 text-gray-400" />
-                                  )}
-                                </div>
-                                <div>
-                                  <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
-                                    {task.title}
-                                  </p>
-                                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                                    <Badge variant="outline" className="text-[10px] capitalize">{task.type}</Badge>
-                                    <span>{task.estimatedHours}h</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-
-            <Dialog
-              open={addTaskDialog.open}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setAddTaskDialog({ open: false, sprintId: null })
-                }
-              }}
-            >
-              <DialogContent className="sm:max-w-[450px]">
-                <DialogHeader>
-                  <DialogTitle>Add task to sprint</DialogTitle>
-                  <DialogDescription>
-                    {addTaskDialog.sprintId
-                      ? `Sprint: ${sprints.find((s) => s.id === addTaskDialog.sprintId)?.name || ""}`
-                      : "Select a sprint to assign this task."}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="add-task-title">Title</Label>
-                    <Input
-                      id="add-task-title"
-                      placeholder="e.g., Implement login screen"
-                      value={newTaskForm.title}
-                      onChange={(e) => setNewTaskForm((prev) => ({ ...prev, title: e.target.value }))}
-                    />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label>Type</Label>
-                      <Select
-                        value={newTaskForm.type}
-                        onValueChange={(val) => setNewTaskForm((prev) => ({ ...prev, type: val }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="frontend">Frontend</SelectItem>
-                          <SelectItem value="backend">Backend</SelectItem>
-                          <SelectItem value="api">API</SelectItem>
-                          <SelectItem value="ux">UX</SelectItem>
-                          <SelectItem value="qa">QA</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="add-task-estimate">Estimate (hrs)</Label>
-                      <Input
-                        id="add-task-estimate"
-                        type="number"
-                        min={1}
-                        placeholder="8"
-                        value={newTaskForm.estimate}
-                        onChange={(e) => setNewTaskForm((prev) => ({ ...prev, estimate: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setAddTaskDialog({ open: false, sprintId: null })}>
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleAddTaskFromDialog}
-                    disabled={!addTaskDialog.sprintId || !newTaskForm.title.trim()}
-                  >
-                    Add Task
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </TabsContent>
-
-          {/* Project Timeline Tab */}
-          <TabsContent value="timeline" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">Plan & timeline</h3>
-                <p className="text-sm text-gray-500">See the critical path, key milestones, and how much buffer remains.</p>
+                <h3 className="text-lg font-semibold">Plan & sprints</h3>
+                <p className="text-sm text-gray-500">Switch between the project timeline and sprint boards.</p>
                 <p className="text-xs text-gray-500">
                   Target delivery around {formatDate(mockProject.deadline)} • {daysRemaining} days to go
                 </p>
@@ -1855,41 +1673,79 @@ Example:
               <div className="flex items-center gap-2 rounded-md border bg-gray-50 p-1">
                 <Button
                   size="sm"
-                  variant={timelineView === "list" ? "default" : "ghost"}
+                  variant={timelineView === "sprints" ? "default" : "ghost"}
                   className="gap-1"
-                  onClick={() => setTimelineView("list")}
+                  onClick={() => setTimelineView("sprints")}
                 >
                   <ListTodo className="h-4 w-4" />
-                  List
+                  Sprints
                 </Button>
                 <Button
                   size="sm"
-                  variant={timelineView === "calendar" ? "default" : "ghost"}
+                  variant={timelineView === "timeline" ? "default" : "ghost"}
                   className="gap-1"
-                  onClick={() => setTimelineView("calendar")}
+                  onClick={() => setTimelineView("timeline")}
                 >
                   <CalendarRange className="h-4 w-4" />
-                  Calendar
+                  Timeline
                 </Button>
               </div>
             </div>
 
-            {timelineView === "list" ? (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {sprints.map((sprint) => {
-                      const completedTasks = sprint.tasks.filter((task) => task.status === "completed").length
-                      const progress = sprint.tasks.length > 0 ? Math.round((completedTasks / sprint.tasks.length) * 100) : 0
+            {timelineView === "timeline" && (
+              <GanttChart
+                sprints={mockGanttSprints}
+                projectStartDate={projectStartDate}
+                projectEndDate={projectEndDate}
+              />
+            )}
 
-                      return (
-                        <div key={sprint.id} className="p-4">
-                          <div className="flex items-start justify-between gap-3">
+            {timelineView === "sprints" && (
+              <>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold">Sprints & task scopes</h3>
+                      <p className="text-sm text-gray-500">
+                        {sprints.length} sprints • {totalTasks} tasks ({sprintCounts.active} active / {sprintCounts.planned} upcoming)
+                      </p>
+                      <p className="text-xs text-gray-500">Drag tasks between sprints to fine-tune scope and load.</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setActiveTab("resources")}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      Resource Planning
+                    </Button>
+                  </div>
+
+                  {sprints.map((sprint) => {
+                    const completedTasks = sprint.tasks.filter((task) => task.status === "completed").length
+                    const progress = sprint.tasks.length > 0 ? Math.round((completedTasks / sprint.tasks.length) * 100) : 0
+
+                    return (
+                      <Card
+                        key={sprint.id}
+                        className={`${sprint.status === "active" ? "ring-2 ring-emerald-500" : ""} ${dragOverSprintId === sprint.id ? "border-2 border-dashed border-emerald-400" : ""}`}
+                        onDragOver={(e) => handleTaskDragOver(e, sprint.id)}
+                        onDragLeave={handleTaskDragLeave}
+                        onDrop={(e) => handleTaskDrop(e, sprint.id)}
+                      >
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
                             <div>
-                              <p className="font-medium">{sprint.name}</p>
-                              <p className="text-sm text-gray-500">
-                                {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)} • {sprint.tasks.length} tasks
-                              </p>
+                              <CardTitle className="text-base">{sprint.name}</CardTitle>
+                              <CardDescription>
+                                {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
+                              </CardDescription>
+                              <div className="mt-3 space-y-1">
+                                <div className="flex items-center justify-between text-sm text-gray-500">
+                                  <span>{progress}% complete</span>
+                                  <span>{completedTasks}/{sprint.tasks.length} tasks</span>
+                                </div>
+                                <Progress value={progress} className="h-2" />
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <Badge variant={
@@ -1903,16 +1759,21 @@ Example:
                               </Button>
                             </div>
                           </div>
-
-                          <div className="mt-3 space-y-3">
-                            <div className="flex items-center justify-between text-sm text-gray-500">
-                              <span>{progress}% complete</span>
-                              <span>{completedTasks}/{sprint.tasks.length} tasks</span>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Drag to reorder or move to another sprint</span>
+                              <span>{completedTasks}/{sprint.tasks.length} done</span>
                             </div>
-                            <Progress value={progress} className="h-2" />
                             <div className="divide-y rounded-lg border">
                               {sprint.tasks.map((task) => (
-                                <div key={task.id} className="flex items-center justify-between p-3">
+                                <div
+                                  key={task.id}
+                                  className="flex items-center justify-between p-4 cursor-grab"
+                                  draggable
+                                  onDragStart={() => handleTaskDragStart(task.id, sprint.id)}
+                                >
                                   <div className="flex items-center gap-3">
                                     <div className={`p-1 rounded ${
                                       task.status === "completed" ? "bg-emerald-100" :
@@ -1930,7 +1791,10 @@ Example:
                                       <p className={`font-medium ${task.status === "completed" ? "text-gray-400 line-through" : ""}`}>
                                         {task.title}
                                       </p>
-                                      <p className="text-sm text-gray-500">{task.type} • {task.estimatedHours}h</p>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <Badge variant="outline" className="text-[10px] capitalize">{task.type}</Badge>
+                                        <span>{task.estimatedHours}h</span>
+                                      </div>
                                     </div>
                                   </div>
                                   <Badge variant="secondary">{task.status.replace("_", " ")}</Badge>
@@ -1938,18 +1802,85 @@ Example:
                               ))}
                             </div>
                           </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+
+                <Dialog
+                  open={addTaskDialog.open}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setAddTaskDialog({ open: false, sprintId: null })
+                    }
+                  }}
+                >
+                  <DialogContent className="sm:max-w-[450px]">
+                    <DialogHeader>
+                      <DialogTitle>Add task to sprint</DialogTitle>
+                      <DialogDescription>
+                        {addTaskDialog.sprintId
+                          ? `Sprint: ${sprints.find((s) => s.id === addTaskDialog.sprintId)?.name || ""}`
+                          : "Select a sprint to assign this task."}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="add-task-title">Title</Label>
+                        <Input
+                          id="add-task-title"
+                          placeholder="e.g., Implement login screen"
+                          value={newTaskForm.title}
+                          onChange={(e) => setNewTaskForm((prev) => ({ ...prev, title: e.target.value }))}
+                        />
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label>Type</Label>
+                          <Select
+                            value={newTaskForm.type}
+                            onValueChange={(val) => setNewTaskForm((prev) => ({ ...prev, type: val }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="frontend">Frontend</SelectItem>
+                              <SelectItem value="backend">Backend</SelectItem>
+                              <SelectItem value="api">API</SelectItem>
+                              <SelectItem value="ux">UX</SelectItem>
+                              <SelectItem value="qa">QA</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <GanttChart
-                sprints={mockGanttSprints}
-                projectStartDate={projectStartDate}
-                projectEndDate={projectEndDate}
-              />
+                        <div className="space-y-1">
+                          <Label htmlFor="add-task-estimate">Estimate (hrs)</Label>
+                          <Input
+                            id="add-task-estimate"
+                            type="number"
+                            min={1}
+                            placeholder="8"
+                            value={newTaskForm.estimate}
+                            onChange={(e) => setNewTaskForm((prev) => ({ ...prev, estimate: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setAddTaskDialog({ open: false, sprintId: null })}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleAddTaskFromDialog}
+                        disabled={!addTaskDialog.sprintId || !newTaskForm.title.trim()}
+                      >
+                        Add Task
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
             )}
           </TabsContent>
 
