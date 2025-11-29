@@ -11,7 +11,7 @@ XPANDER is an AI-native project management and delivery assistant that automates
 - **Frontend & Backend**: Next.js 16 (App Router)
 - **Database**: Supabase (Postgres + Auth + Storage)
 - **AI**: OpenAI API (GPT-4o-mini primary model)
-- **UI Components**: Radix UI + Tailwind CSS + shadcn/ui
+- **UI Components**: Pure Tailwind CSS 4 (no UI libraries)
 - **Charts**: Recharts
 - **Deployment**: Vercel
 
@@ -198,10 +198,49 @@ export async function POST(request: Request) {
 - For interactive UI with state, events, hooks
 - Use `createClient()` from `@/lib/supabase/client` for client-side operations
 
-### UI Components
-- All UI components in `src/components/ui/` follow shadcn/ui patterns
-- Use Radix UI primitives with Tailwind styling
-- Variants managed with `class-variance-authority` (cva)
+### UI Components (Pure Tailwind 4)
+
+All UI components in `src/components/ui/` are custom-built using **pure Tailwind 4** without any external UI libraries.
+
+**Available Components:**
+- **Button**: Variants (default, destructive, outline, secondary, ghost, link) and sizes (default, sm, lg, icon)
+- **Input, Textarea, Label**: Form elements with consistent styling
+- **Card**: Container with Header, Title, Description, Content, Footer sub-components
+- **Dialog**: Modal dialogs with Context API, keyboard navigation (Escape), focus trap, and body scroll lock
+- **Select**: Custom dropdown with keyboard support, click-outside detection
+- **Tabs**: Tab navigation with Context API for state management
+- **Badge**: Small status indicators with multiple variants
+- **Progress**: Progress bar with configurable value and max
+- **Separator**: Horizontal/vertical dividers
+- **Skeleton**: Loading placeholders
+- **ScrollArea**: Simplified overflow container
+
+**Component Variant Pattern:**
+```typescript
+// Simple object mapping for variants instead of CVA
+const variants = {
+  default: "classes for default variant",
+  outline: "classes for outline variant",
+}
+
+// Apply using array index
+className={cn(baseStyles, variants[variant], className)}
+```
+
+**Interactive Component Pattern:**
+```typescript
+// Use Context API for component composition
+const ComponentContext = React.createContext<Value>()
+
+function Component({ children }) {
+  const [state, setState] = useState()
+  return (
+    <ComponentContext.Provider value={{ state, setState }}>
+      {children}
+    </ComponentContext.Provider>
+  )
+}
+```
 
 ## Database Operations
 
@@ -272,10 +311,11 @@ POST /api/ai/report
 1. **AI-First Design**: All planning features leverage AI; design prompts carefully
 2. **Serverless Constraints**: No background jobs; all processing happens in request/response cycle
 3. **Type Safety**: Use TypeScript types from `src/types/database.ts` for all database operations
-4. **Minimal UI**: Clean, functional UI without complex visualizations (except Gantt chart)
-5. **Context Management**: Always provide complete context to AI (project, tasks, sprints, metrics)
-6. **Error Handling**: Gracefully handle AI failures; retry once on invalid JSON
-7. **Progressive Enhancement**: Core features work without JavaScript; enhance with interactivity
+4. **Pure Tailwind 4**: All UI components built with Tailwind CSS only - no external UI libraries
+5. **Minimal UI**: Clean, functional UI without complex visualizations (except Gantt chart)
+6. **Context Management**: Always provide complete context to AI (project, tasks, sprints, metrics)
+7. **Error Handling**: Gracefully handle AI failures; retry once on invalid JSON
+8. **Component Composition**: Use React Context API for interactive component state sharing
 
 ## Documentation
 

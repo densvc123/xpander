@@ -581,11 +581,9 @@ export default function ResourcesPage() {
                 Sorted by highest load first so you can spot overload quickly.
               </p>
               <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline" className="gap-1">
-                    <UserPlus className="h-4 w-4" />
-                    Add resource
-                  </Button>
+                <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-gray-200 bg-white shadow-sm hover:bg-gray-100 hover:text-gray-900 h-8 px-3 text-xs gap-1">
+                  <UserPlus className="h-4 w-4" />
+                  Add resource
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[480px]">
                   <DialogHeader>
@@ -725,7 +723,7 @@ export default function ResourcesPage() {
                           </Badge>
                           <Button
                             type="button"
-                            size="xs"
+                            size="sm"
                             variant="outline"
                             className="mt-1"
                             onClick={() =>

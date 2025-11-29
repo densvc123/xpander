@@ -1145,11 +1145,9 @@ export default function ProjectDetailPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Users className="h-4 w-4 mr-2" />
-                        Add team member
-                      </Button>
+                    <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-gray-200 bg-white shadow-sm hover:bg-gray-100 hover:text-gray-900 h-8 px-3 text-xs">
+                      <Users className="h-4 w-4 mr-2" />
+                      Add team member
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[420px]">
                       <DialogHeader>
@@ -1330,7 +1328,7 @@ export default function ProjectDetailPage() {
                                   </p>
                                   <Button
                                     variant="ghost"
-                                    size="xs"
+                                    size="sm"
                                     className="text-[11px]"
                                     onClick={() => handleClearAssignmentsForResource(resource.id)}
                                     disabled={clearingResourceId === resource.id}
@@ -1974,11 +1972,9 @@ Example:
                 <p className="text-sm text-gray-500">{changeRequests.length} open request(s)</p>
               </div>
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Request a change
-                  </Button>
+                <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-emerald-600 text-white shadow hover:bg-emerald-700 h-9 px-4 py-2">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Request a change
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[500px]">
                   <DialogHeader>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type DragEvent } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { MainLayout } from "@/components/layout/main-layout"
@@ -19,18 +19,22 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn, formatDate } from "@/lib/utils"
+import { FILE_UPLOAD_CONFIG, formatFileSize } from "@/lib/file-upload-config"
 import {
   ArrowLeft,
   ArrowRight,
   CalendarRange,
   Check,
   ClipboardList,
+  FileSpreadsheet,
+  FileText,
   Loader2,
   ShieldAlert,
   Sparkles,
   Target,
   Users2,
-  Wand2
+  Wand2,
+  X
 } from "lucide-react"
 import type {
   InputType,
@@ -41,7 +45,7 @@ import type {
   TaskType
 } from "@/types/database"
 
-type StepId = "requirements" | "analysis" | "backlog" | "plan"
+type StepId = "basics" | "requirements" | "backlog" | "plan"
 
 type Audience = "internal_team" | "customers" | "both" | "other"
 type InitiativeSize = "small" | "medium" | "large"
@@ -100,8 +104,8 @@ type AssignmentItem = {
 }
 
 const steps: { id: StepId; title: string; description: string }[] = [
-  { id: "requirements", title: "Requirements", description: "Capture scope and constraints" },
-  { id: "analysis", title: "AI Analysis", description: "Get AI summary, risks, and effort" },
+  { id: "basics", title: "Project Basics", description: "Name, dates, and goals" },
+  { id: "requirements", title: "Requirements & AI", description: "Input requirements and analyze" },
   { id: "backlog", title: "Sprints & Tasks", description: "Align tasks to sprints" },
   { id: "plan", title: "Plan & Resources", description: "Timeline and resource allocation" }
 ]
@@ -256,7 +260,7 @@ const nextScope = (scope: TaskScope): TaskScope => {
 
 export default function NewProjectWizard() {
   const router = useRouter()
-  const [activeStep, setActiveStep] = useState<StepId>("requirements")
+  const [activeStep, setActiveStep] = useState<StepId>("basics")
   const [project, setProject] = useState<{
     name: string
     description: string
@@ -298,6 +302,9 @@ export default function NewProjectWizard() {
     input_type: "prd_text",
     content: ""
   })
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; content: string }>>([])
+  const [isDraggingFile, setIsDraggingFile] = useState(false)
+  const [inputMethod, setInputMethod] = useState<"text" | "file">("text")
   const [analysis, setAnalysis] = useState<AnalysisPayload | null>(null)
   const [analysisRefinement, setAnalysisRefinement] = useState("")
   const [analysisIsBaseline, setAnalysisIsBaseline] = useState(false)
@@ -380,8 +387,8 @@ export default function NewProjectWizard() {
   }, [sprints, project.deadline])
 
   const canProceed = (step: StepId) => {
-    if (step === "requirements") return Boolean(project.name && requirementsInput.content && projectMeta.goal)
-    if (step === "analysis") return Boolean(analysis)
+    if (step === "basics") return Boolean(project.name && projectMeta.goal)
+    if (step === "requirements") return Boolean(requirementsInput.content) && Boolean(analysis)
     if (step === "backlog") return tasks.length > 0 && sprints.length > 0
     return true
   }
@@ -390,9 +397,6 @@ export default function NewProjectWizard() {
     if (currentStepIndex < steps.length - 1) {
       const nextId = steps[currentStepIndex + 1].id
       setActiveStep(nextId)
-      if (nextId === "analysis" && autoAISuggestions && !analysis && !isLoading.analysis) {
-        void runAnalysis()
-      }
     }
   }
 
@@ -402,15 +406,141 @@ export default function NewProjectWizard() {
     }
   }
 
+  const handleDragOverUpload = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = "copy"
+    if (!isDraggingFile) {
+      setIsDraggingFile(true)
+    }
+  }
+
+  const handleDragLeaveUpload = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget as Node)) {
+      return
+    }
+    setIsDraggingFile(false)
+  }
+
+  const handleDropUpload = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDraggingFile(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) {
+      void handleFileUpload(file)
+    }
+  }
+
+  const handleFileUpload = async (file: File) => {
+    // Import validation and config
+    const { validateFile, FILE_UPLOAD_CONFIG } = await import('@/lib/file-upload-config')
+
+    // Check file count limit
+    if (uploadedFiles.length >= FILE_UPLOAD_CONFIG.MAX_FILES) {
+      setStatusMessage(`Maximum ${FILE_UPLOAD_CONFIG.MAX_FILES} files allowed. Please remove a file before adding another.`)
+      return
+    }
+
+    // Check if file already exists
+    const isDuplicate = uploadedFiles.some(f => f.file.name === file.name && f.file.size === file.size)
+    if (isDuplicate) {
+      setStatusMessage(`File "${file.name}" is already uploaded.`)
+      return
+    }
+
+    // Validate individual file
+    const validation = validateFile(file)
+    if (!validation.valid) {
+      setStatusMessage(validation.error || 'Invalid file')
+      return
+    }
+
+    // Check total size
+    const totalSize = uploadedFiles.reduce((sum, f) => sum + f.file.size, 0) + file.size
+    if (totalSize > FILE_UPLOAD_CONFIG.MAX_TOTAL_SIZE) {
+      setStatusMessage(`Total file size exceeds ${FILE_UPLOAD_CONFIG.MAX_TOTAL_SIZE_MB}MB limit. Current: ${(totalSize / 1024 / 1024).toFixed(2)}MB`)
+      return
+    }
+
+    setStatusMessage(`Processing ${file.name}...`)
+
+    try {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      let content = ''
+
+      if (fileExtension === 'txt' || fileExtension === 'md') {
+        content = await file.text()
+      } else if (fileExtension === 'pdf' || fileExtension === 'xlsx' || fileExtension === 'xls' || fileExtension === 'docx') {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const response = await fetch('/api/ai/parse-file', {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+          setStatusMessage(`Failed to parse ${file.name}: ${errorData.error}`)
+          return
+        }
+
+        const result = await response.json()
+        content = result.content
+      } else {
+        setStatusMessage("Unsupported file type. Please use .txt, .md, .pdf, .xlsx, or .docx")
+        return
+      }
+
+      // Add file to the list
+      const newFiles = [...uploadedFiles, { file, content }]
+      setUploadedFiles(newFiles)
+
+      // Merge all content
+      const mergedContent = newFiles.map((f, idx) =>
+        `=== File ${idx + 1}: ${f.file.name} ===\n\n${f.content}`
+      ).join('\n\n')
+
+      setRequirementsInput({ ...requirementsInput, content: mergedContent, input_type: "prd_text" })
+      setStatusMessage(`${file.name} uploaded successfully. Total files: ${newFiles.length}`)
+    } catch (error) {
+      console.error("File upload error:", error)
+      setStatusMessage(`Failed to process ${file.name}. Please try again.`)
+    }
+  }
+
+  const removeFile = (fileToRemove: File) => {
+    const newFiles = uploadedFiles.filter(f => f.file !== fileToRemove)
+    setUploadedFiles(newFiles)
+
+    if (newFiles.length === 0) {
+      setRequirementsInput({ ...requirementsInput, content: "" })
+      setStatusMessage(null)
+    } else {
+      // Merge remaining content
+      const mergedContent = newFiles.map((f, idx) =>
+        `=== File ${idx + 1}: ${f.file.name} ===\n\n${f.content}`
+      ).join('\n\n')
+      setRequirementsInput({ ...requirementsInput, content: mergedContent })
+      setStatusMessage(`File removed. ${newFiles.length} file(s) remaining.`)
+    }
+  }
+
   const runAnalysis = async (refinementNote?: string) => {
     setIsLoading((prev) => ({ ...prev, analysis: true }))
     setStatusMessage(null)
+
+    const requirementsContent = requirementsInput.content
+
     try {
       const response = await fetch("/api/ai/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          requirements: requirementsInput.content + (refinementNote ? `\n\nRefinement note from user:\n${refinementNote}` : ""),
+          requirements: requirementsContent + (refinementNote ? `\n\nRefinement note from user:\n${refinementNote}` : ""),
           projectName: project.name,
           deadline: project.deadline
         })
@@ -451,12 +581,13 @@ export default function NewProjectWizard() {
   const runBacklogBreakdown = async () => {
     setIsLoading((prev) => ({ ...prev, backlog: true }))
     setStatusMessage(null)
+    const requirementsContent = requirementsInput.content
     try {
       const response = await fetch("/api/ai/breakdown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          requirements: requirementsInput.content,
+          requirements: requirementsContent,
           analysis,
           projectName: project.name
         })
@@ -656,33 +787,102 @@ export default function NewProjectWizard() {
     setIsLoading((prev) => ({ ...prev, saving: true }))
     setStatusMessage(null)
     try {
-      const response = await fetch("/api/projects", {
+      // Step 1: Create project
+      const projectResponse = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: project.name,
           description: project.description,
           deadline: project.deadline,
-          startDate: project.start_date
+          startDate: project.start_date,
+          status: project.status,
+          health: project.health
         })
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to create project")
+      if (!projectResponse.ok) {
+        const errorData = await projectResponse.json().catch(() => ({ error: "Unknown error" }))
+        console.error("API Error:", errorData)
+        throw new Error(errorData.error || "Failed to create project")
       }
 
-      setStatusMessage("Project created. You can continue planning or return to Projects.")
-      router.push("/projects")
+      const { project: createdProject } = await projectResponse.json()
+      setStatusMessage("Project created! Saving additional data...")
+
+      // Step 2: Save requirements input if exists
+      const requirementsContent = requirementsInput.content
+      if (requirementsContent) {
+        await fetch(`/api/projects/${createdProject.id}/inputs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inputType: requirementsInput.input_type,
+            content: requirementsContent
+          })
+        }).catch(err => console.warn("Failed to save requirements:", err))
+      }
+
+      // Step 3: Save sprints if exists
+      const sprintIdMap = new Map<string, string>()
+      if (sprints.length > 0) {
+        for (const sprint of sprints) {
+          const sprintResponse = await fetch(`/api/projects/${createdProject.id}/sprints`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: sprint.name,
+              goal: sprint.goal,
+              startDate: sprint.start_date,
+              endDate: sprint.end_date,
+              status: sprint.status,
+              orderIndex: sprint.order_index
+            })
+          }).catch(err => {
+            console.warn("Failed to save sprint:", err)
+            return null
+          })
+
+          if (sprintResponse?.ok) {
+            const { sprint: createdSprint } = await sprintResponse.json()
+            sprintIdMap.set(sprint.id, createdSprint.id)
+          }
+        }
+      }
+
+      // Step 4: Save tasks if exists
+      if (tasks.length > 0) {
+        for (const task of tasks) {
+          const mappedSprintId = task.sprint_id ? sprintIdMap.get(task.sprint_id) : null
+          await fetch(`/api/projects/${createdProject.id}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sprintId: mappedSprintId,
+              title: task.title,
+              description: task.description,
+              taskType: task.task_type,
+              status: task.status,
+              priority: task.priority,
+              estimatedHours: task.estimated_hours
+            })
+          }).catch(err => console.warn("Failed to save task:", err))
+        }
+      }
+
+      setStatusMessage("Project created successfully with all planning data!")
+      setTimeout(() => router.push("/projects"), 1500)
     } catch (error) {
       console.error("Save error:", error)
-      setStatusMessage("Project save failed. Your plan is still on this page; please try again.")
+      const errorMessage = error instanceof Error ? error.message : "Unknown error"
+      setStatusMessage(`Project save failed: ${errorMessage}. Please try again.`)
     } finally {
       setIsLoading((prev) => ({ ...prev, saving: false }))
     }
   }
 
-  const requirementReady = canProceed("requirements")
-  const analysisReady = canProceed("analysis")
+  const basicsReady = canProceed("basics")
+  const requirementsReady = canProceed("requirements")
   const backlogReady = canProceed("backlog")
 
   return (
@@ -693,14 +893,14 @@ export default function NewProjectWizard() {
           Back to Projects
         </Link>
 
-        <div className="border-y border-gray-200">
+        <div className="py-4">
           <nav
             aria-label="Wizard progress"
             className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8"
           >
             <ol
               role="list"
-              className="overflow-hidden rounded-md md:flex md:rounded-none md:border-x md:border-gray-200"
+              className="overflow-hidden rounded-md border border-gray-200 md:flex"
             >
                   {steps.map((step, idx) => {
                     const state = idx < currentStepIndex ? "complete" : idx === currentStepIndex ? "current" : "upcoming"
@@ -712,9 +912,9 @@ export default function NewProjectWizard() {
                       <li key={step.id} className="relative overflow-hidden md:flex-1">
                         <div
                           className={cn(
-                            isFirst ? "rounded-t-md border-b-0 md:rounded-none" : "",
-                            isLast ? "rounded-b-md border-t-0 md:rounded-none" : "",
-                            "overflow-hidden border border-gray-200 md:border-0"
+                            isFirst ? "rounded-l-md md:rounded-l-md" : "",
+                            isLast ? "rounded-r-md md:rounded-r-md" : "",
+                            "overflow-hidden"
                           )}
                         >
                           {/* Completed */}
@@ -838,11 +1038,11 @@ export default function NewProjectWizard() {
               </nav>
         </div>
 
-        {activeStep === "requirements" && (
+        {activeStep === "basics" && (
           <Card>
             <CardHeader>
-              <CardTitle>Requirements & Project Basics</CardTitle>
-              <CardDescription>Share the essentials so AI can plan sprints, tasks, and resources.</CardDescription>
+              <CardTitle>Project Basics</CardTitle>
+              <CardDescription>Set up your project foundation with essential information and goals.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
@@ -892,54 +1092,64 @@ export default function NewProjectWizard() {
                 </div>
               </div>
 
+              <div className="space-y-3">
+                <Label htmlFor="goal">Goal (3–6 month outcome)</Label>
+                <Textarea
+                  id="goal"
+                  rows={3}
+                  placeholder="e.g. Launch an AI project planning wizard that helps PMs go from idea to plan in under 10 minutes."
+                  value={projectMeta.goal}
+                  onChange={(e) => setProjectMeta({ ...projectMeta, goal: e.target.value })}
+                />
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-3">
-                  <Label htmlFor="goal">Goal (3–6 month outcome)</Label>
-                  <Textarea
-                    id="goal"
-                    rows={3}
-                    placeholder="e.g. Launch an AI project planning wizard that helps PMs go from idea to plan in under 10 minutes."
-                    value={projectMeta.goal}
-                    onChange={(e) => setProjectMeta({ ...projectMeta, goal: e.target.value })}
-                  />
+                  <Label>Who is this for?</Label>
+                  <Select
+                    value={projectMeta.audience}
+                    onValueChange={(value) => setProjectMeta({ ...projectMeta, audience: value as Audience })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select primary audience" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="internal_team">Internal team</SelectItem>
+                      <SelectItem value="customers">Customers</SelectItem>
+                      <SelectItem value="both">Both internal & customers</SelectItem>
+                      <SelectItem value="other">Other / not sure yet</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Who is this for?</Label>
-                    <Select
-                      value={projectMeta.audience}
-                      onValueChange={(value) => setProjectMeta({ ...projectMeta, audience: value as Audience })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select primary audience" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="internal_team">Internal team</SelectItem>
-                        <SelectItem value="customers">Customers</SelectItem>
-                        <SelectItem value="both">Both internal & customers</SelectItem>
-                        <SelectItem value="other">Other / not sure yet</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>How big is this initiative?</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {(["small", "medium", "large"] as InitiativeSize[]).map((size) => (
-                        <Button
-                          key={size}
-                          type="button"
-                          size="sm"
-                          variant={projectMeta.initiativeSize === size ? "default" : "outline"}
-                          onClick={() => setProjectMeta({ ...projectMeta, initiativeSize: size })}
-                        >
-                          {size === "small" && "Small (1–2 weeks)"}
-                          {size === "medium" && "Medium (3–6 weeks)"}
-                          {size === "large" && "Large (6+ weeks)"}
-                        </Button>
-                      ))}
-                    </div>
+                <div className="space-y-3">
+                  <Label>How big is this initiative?</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(["small", "medium", "large"] as InitiativeSize[]).map((size) => (
+                      <Button
+                        key={size}
+                        type="button"
+                        size="sm"
+                        variant={projectMeta.initiativeSize === size ? "default" : "outline"}
+                        onClick={() => setProjectMeta({ ...projectMeta, initiativeSize: size })}
+                      >
+                        {size === "small" && "Small (1–2 weeks)"}
+                        {size === "medium" && "Medium (3–6 weeks)"}
+                        {size === "large" && "Large (6+ weeks)"}
+                      </Button>
+                    ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="description">Problem Statement</Label>
+                <Textarea
+                  id="description"
+                  rows={3}
+                  placeholder="What outcome do you want? Any constraints, scope boundaries, success metrics."
+                  value={project.description}
+                  onChange={(e) => setProject({ ...project, description: e.target.value })}
+                />
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -1001,52 +1211,27 @@ export default function NewProjectWizard() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <Label htmlFor="description">Problem Statement</Label>
-                <Textarea
-                  id="description"
-                  rows={3}
-                  placeholder="What outcome do you want? Any constraints, scope boundaries, success metrics."
-                  value={project.description}
-                  onChange={(e) => setProject({ ...project, description: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="requirements">Requirements / PRD</Label>
-                  <Badge variant="outline">Tip: include goals and acceptance criteria</Badge>
-                </div>
-                <Textarea
-                  id="requirements"
-                  rows={8}
-                  placeholder="Paste requirements, acceptance criteria, constraints, stakeholders..."
-                  value={requirementsInput.content}
-                  onChange={(e) => setRequirementsInput({ ...requirementsInput, content: e.target.value })}
-                />
-              </div>
-
-              <div className="flex justify-between pt-2">
-                <div className="text-sm text-gray-500">Next: run AI analysis to summarize and size the work.</div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => router.push("/projects")}>Cancel</Button>
-                  <Button onClick={nextStep} disabled={!requirementReady}>
-                    Continue to Analysis
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <Button variant="outline" onClick={() => router.push("/projects")}>
+                  Cancel
+                </Button>
+                <Button onClick={nextStep} disabled={!basicsReady}>
+                  Continue to Requirements
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {activeStep === "analysis" && (
+        {activeStep === "requirements" && (
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <CardTitle>AI Analysis</CardTitle>
-                  <CardDescription>AI summarizes the project, flags risks and dependencies, and estimates effort.</CardDescription>
+                  <CardTitle>Requirements & AI Analysis</CardTitle>
+                  <CardDescription>Input your requirements via text or file upload, then let AI analyze and plan.</CardDescription>
                 </div>
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Sparkles className="h-4 w-4" /> AI
@@ -1054,21 +1239,183 @@ export default function NewProjectWizard() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => runAnalysis()} disabled={isLoading.analysis}>
+              {/* Input Method Selection */}
+              <div className="space-y-3">
+                <Label>Input Method</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={inputMethod === "text" ? "default" : "outline"}
+                    onClick={() => setInputMethod("text")}
+                  >
+                    Text Input
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={inputMethod === "file" ? "default" : "outline"}
+                    onClick={() => setInputMethod("file")}
+                  >
+                    Upload File
+                  </Button>
+                </div>
+              </div>
+
+              {/* Text Input */}
+              {inputMethod === "text" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="requirements">Requirements / PRD</Label>
+                    <Badge variant="outline">Tip: include goals and acceptance criteria</Badge>
+                  </div>
+                  <Textarea
+                    id="requirements"
+                    rows={12}
+                    placeholder="Paste requirements, acceptance criteria, constraints, stakeholders..."
+                    value={requirementsInput.content}
+                    onChange={(e) => setRequirementsInput({ ...requirementsInput, content: e.target.value })}
+                  />
+                </div>
+              )}
+
+              {/* File Upload */}
+              {inputMethod === "file" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="file-upload">Upload Requirements Document</Label>
+                    <div className="text-xs text-gray-500">
+                      Max 5 files • 10MB each • 50MB total
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "border-2 border-dashed rounded-lg p-8 text-center space-y-3 transition-colors",
+                      isDraggingFile ? "border-emerald-500 bg-emerald-50/60" : "border-gray-300"
+                    )}
+                    onDragOver={handleDragOverUpload}
+                    onDragEnter={handleDragOverUpload}
+                    onDragLeave={handleDragLeaveUpload}
+                    onDrop={handleDropUpload}
+                  >
+                    <div className="flex justify-center">
+                      <ClipboardList className="h-12 w-12 text-gray-400" />
+                    </div>
+                    <div>
+                      <label htmlFor="file-upload" className="cursor-pointer">
+                        <span className="text-sm font-medium text-emerald-600 hover:text-emerald-700">
+                          Click to upload
+                        </span>
+                        <span className="text-sm text-gray-500"> or drag and drop</span>
+                      </label>
+                      <input
+                        id="file-upload"
+                        type="file"
+                        className="hidden"
+                        accept={FILE_UPLOAD_CONFIG.ACCEPT_ATTRIBUTE}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            void handleFileUpload(file)
+                            // Reset input so the same file can be uploaded again if needed
+                            e.target.value = ''
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">
+                        Supported formats: .txt, .md, .pdf, .xlsx, .docx
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Maximum file size: 10MB
+                      </p>
+                    </div>
+                    {uploadedFiles.length > 0 && (
+                      <div className="text-sm text-emerald-600 pt-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <Check className="h-4 w-4" />
+                          <span>{uploadedFiles.length} file{uploadedFiles.length > 1 ? 's' : ''} uploaded</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Uploaded Files List */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>Uploaded Files ({uploadedFiles.length}/{FILE_UPLOAD_CONFIG.MAX_FILES})</Label>
+                        <div className="text-xs text-gray-500">
+                          Total: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.file.size, 0))} / {FILE_UPLOAD_CONFIG.MAX_TOTAL_SIZE_MB}MB
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {uploadedFiles.map((uploadedFile, index) => {
+                          const fileExtension = uploadedFile.file.name.split('.').pop()?.toLowerCase()
+                          const FileIcon = fileExtension === 'pdf' ? FileText :
+                                          (fileExtension === 'xlsx' || fileExtension === 'xls') ? FileSpreadsheet :
+                                          fileExtension === 'docx' ? FileText :
+                                          FileText
+
+                          return (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between p-3 rounded-md border border-gray-200 bg-white"
+                            >
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <FileIcon className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {uploadedFile.file.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {formatFileSize(uploadedFile.file.size)} • .{fileExtension}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeFile(uploadedFile.file)}
+                                className="ml-3 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                title="Remove file"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Merged Content Preview */}
+                  {requirementsInput.content && uploadedFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Merged Content Preview</Label>
+                      <div className="rounded-md border border-gray-200 bg-gray-50 p-4 max-h-64 overflow-y-auto">
+                        <pre className="text-xs text-gray-700 whitespace-pre-wrap">{requirementsInput.content}</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AI Analysis Action */}
+              <div className="space-y-3">
+                <Button
+                  onClick={() => runAnalysis()}
+                  disabled={isLoading.analysis || !requirementsInput.content}
+                >
                   {isLoading.analysis ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
                   Analyze requirements
                 </Button>
-                <Button variant="outline" onClick={prevStep}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to requirements
-                </Button>
-                <Button variant="outline" onClick={nextStep} disabled={!analysisReady}>
-                  Continue to Sprints
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
+                {!analysis && (
+                  <p className="text-xs text-gray-500">Run AI analysis to proceed to the next step</p>
+                )}
               </div>
 
+              {/* AI Analysis Results */}
               {analysis && (
                 <div className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-2">
@@ -1156,20 +1503,6 @@ export default function NewProjectWizard() {
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-semibold text-gray-900">Review checklist</CardTitle>
-                      <CardDescription>Use this as a quick sanity check before planning.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm text-gray-700">
-                      <ul className="list-disc list-inside space-y-1">
-                        <li>Does the summary match what you actually want to ship?</li>
-                        <li>Are there any missing key risks or dependencies?</li>
-                        <li>Are must‑have features clearly represented?</li>
-                      </ul>
-                    </CardContent>
-                  </Card>
-
                   <div className="grid gap-4 md:grid-cols-2">
                     <Card>
                       <CardHeader className="pb-2">
@@ -1201,27 +1534,32 @@ export default function NewProjectWizard() {
                     </Card>
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-semibold text-gray-900">Baseline this plan</CardTitle>
-                        <CardDescription>Mark this analysis as your reference point for changes later.</CardDescription>
+                        <CardTitle className="text-sm font-semibold text-gray-900">Review checklist</CardTitle>
+                        <CardDescription>Use this as a quick sanity check before planning.</CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-3 text-sm text-gray-700">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 rounded border-gray-300"
-                            checked={analysisIsBaseline}
-                            onChange={(e) => setAnalysisIsBaseline(e.target.checked)}
-                          />
-                          <span>Mark this as my current baseline</span>
-                        </label>
-                        <p className="text-xs text-gray-500">
-                          This doesn&apos;t change any data yet, but it helps you mentally anchor future changes against this plan.
-                        </p>
+                      <CardContent className="space-y-2 text-sm text-gray-700">
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Does the summary match what you actually want to ship?</li>
+                          <li>Are there any missing key risks or dependencies?</li>
+                          <li>Are must‑have features clearly represented?</li>
+                        </ul>
                       </CardContent>
                     </Card>
                   </div>
                 </div>
               )}
+
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <Button variant="outline" onClick={prevStep}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Basics
+                </Button>
+                <Button onClick={nextStep} disabled={!requirementsReady}>
+                  Continue to Sprints
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -1233,6 +1571,7 @@ export default function NewProjectWizard() {
               <CardDescription>Review AI-generated tasks and how they roll up into sprints.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Action Buttons */}
               <div className="flex flex-wrap gap-3">
                 <Button onClick={runBacklogBreakdown} disabled={isLoading.backlog}>
                   {isLoading.backlog ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
@@ -1241,14 +1580,6 @@ export default function NewProjectWizard() {
                 <Button onClick={runSprintPlan} disabled={!tasks.length || isLoading.plan}>
                   {isLoading.plan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarRange className="h-4 w-4 mr-2" />}
                   Plan sprints & dates
-                </Button>
-                <Button variant="outline" onClick={prevStep}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to analysis
-                </Button>
-                <Button variant="outline" onClick={nextStep} disabled={!backlogReady}>
-                  Continue to plan
-                  <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </div>
 
@@ -1413,6 +1744,18 @@ export default function NewProjectWizard() {
                   {!sprints.length && <div className="text-sm text-gray-500">Run sprint planning to generate sprint records.</div>}
                 </CardContent>
               </Card>
+
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <Button variant="outline" onClick={prevStep}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Requirements
+                </Button>
+                <Button onClick={nextStep} disabled={!backlogReady}>
+                  Continue to Plan
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -1475,25 +1818,18 @@ export default function NewProjectWizard() {
                 </div>
               </div>
 
+              {/* Action Button */}
               <div className="flex flex-wrap gap-3">
                 <Button onClick={autoAllocateResources} disabled={!tasks.length}>
                   <Users2 className="h-4 w-4 mr-2" />
                   Auto-allocate resources
-                </Button>
-                <Button variant="outline" onClick={prevStep}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to sprints
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setActiveStep("backlog")}
                 >
-                  I want to simplify scope
-                </Button>
-                <Button onClick={saveProject} disabled={isLoading.saving}>
-                  {isLoading.saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowRight className="h-4 w-4 mr-2" />}
-                  Looks good, create project
+                  Simplify scope
                 </Button>
               </div>
 
@@ -1592,6 +1928,18 @@ export default function NewProjectWizard() {
                 </CardContent>
               </Card>
 
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <Button variant="outline" onClick={prevStep}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Sprints
+                </Button>
+                <Button onClick={saveProject} disabled={isLoading.saving}>
+                  {isLoading.saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Create Project
+                  {!isLoading.saving && <ArrowRight className="h-4 w-4 ml-2" />}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
