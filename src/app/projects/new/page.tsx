@@ -45,7 +45,7 @@ import type {
   TaskType
 } from "@/types/database"
 
-type StepId = "basics" | "requirements" | "backlog" | "plan"
+type StepId = "basics" | "requirements" | "tasks" | "resources" | "sprints"
 
 type Audience = "internal_team" | "customers" | "both" | "other"
 type InitiativeSize = "small" | "medium" | "large"
@@ -106,8 +106,9 @@ type AssignmentItem = {
 const steps: { id: StepId; title: string; description: string }[] = [
   { id: "basics", title: "Project Basics", description: "Name, dates, and goals" },
   { id: "requirements", title: "Requirements & AI", description: "Input requirements and analyze" },
-  { id: "backlog", title: "Sprints & Tasks", description: "Align tasks to sprints" },
-  { id: "plan", title: "Plan & Resources", description: "Timeline and resource allocation" }
+  { id: "tasks", title: "Task Breakdown", description: "Generate and review tasks" },
+  { id: "resources", title: "Team & Resources", description: "Define team capacity" },
+  { id: "sprints", title: "Sprint Planning", description: "Plan sprints and timeline" }
 ]
 
 const defaultResources: ResourceItem[] = [
@@ -389,7 +390,9 @@ export default function NewProjectWizard() {
   const canProceed = (step: StepId) => {
     if (step === "basics") return Boolean(project.name && projectMeta.goal)
     if (step === "requirements") return Boolean(requirementsInput.content) && Boolean(analysis)
-    if (step === "backlog") return tasks.length > 0 && sprints.length > 0
+    if (step === "tasks") return tasks.length > 0
+    if (step === "resources") return resources.length > 0
+    if (step === "sprints") return sprints.length > 0
     return true
   }
 
@@ -883,7 +886,9 @@ export default function NewProjectWizard() {
 
   const basicsReady = canProceed("basics")
   const requirementsReady = canProceed("requirements")
-  const backlogReady = canProceed("backlog")
+  const tasksReady = canProceed("tasks")
+  const resourcesReady = canProceed("resources")
+  const sprintsReady = canProceed("sprints")
 
   return (
     <MainLayout title="New Project Wizard">
@@ -1556,7 +1561,7 @@ export default function NewProjectWizard() {
                   Back to Basics
                 </Button>
                 <Button onClick={nextStep} disabled={!requirementsReady}>
-                  Continue to Sprints
+                  Continue to Tasks
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </div>
@@ -1564,25 +1569,305 @@ export default function NewProjectWizard() {
           </Card>
         )}
 
-        {activeStep === "backlog" && (
+        {activeStep === "tasks" && (
           <Card>
             <CardHeader>
-              <CardTitle>Sprints & Tasks</CardTitle>
-              <CardDescription>Review AI-generated tasks and how they roll up into sprints.</CardDescription>
+              <CardTitle>Task Breakdown</CardTitle>
+              <CardDescription>Generate and review AI-created tasks from your requirements.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Action Buttons */}
+              {/* Action Button */}
               <div className="flex flex-wrap gap-3">
                 <Button onClick={runBacklogBreakdown} disabled={isLoading.backlog}>
                   {isLoading.backlog ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
                   AI task breakdown
                 </Button>
-                <Button onClick={runSprintPlan} disabled={!tasks.length || isLoading.plan}>
-                  {isLoading.plan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarRange className="h-4 w-4 mr-2" />}
-                  Plan sprints & dates
-                </Button>
               </div>
 
+              {/* Metrics */}
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Total Tasks</CardTitle>
+                    <CardDescription>Number of work items</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold">{tasks.length || 0}</div>
+                    <div className="text-xs text-gray-500">
+                      {topEffortArea ? `Most effort: ${topEffortArea}` : "No tasks yet"}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Total Effort</CardTitle>
+                    <CardDescription>Estimated hours</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold">{totalHours}h</div>
+                    {analysis && (
+                      <div className="text-xs text-gray-500">
+                        vs AI estimate: {analysis.effort_estimate_hours}h
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Must-Have Tasks</CardTitle>
+                    <CardDescription>Critical for MVP</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold">
+                      {tasks.filter(t => t.scope === "must_have").length}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {tasks.filter(t => t.scope === "must_have").reduce((sum, t) => sum + t.estimated_hours, 0)}h total
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Task List */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ClipboardList className="h-4 w-4 text-slate-600" />
+                    Task List
+                  </CardTitle>
+                  <CardDescription>Click scope badges to adjust priority (must-have → nice-to-have → later)</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-6 text-xs font-medium text-gray-500">
+                    <div className="col-span-2">Title</div>
+                    <div>Type</div>
+                    <div>Estimate</div>
+                    <div>Priority</div>
+                    <div>Scope</div>
+                  </div>
+                  <div className="divide-y">
+                    {tasks.map((task) => (
+                      <div key={task.id} className="grid grid-cols-6 py-3 items-start">
+                        <div className="col-span-2">
+                          <div className="font-medium text-gray-900">{task.title}</div>
+                          <p className="text-sm text-gray-600">{task.description}</p>
+                        </div>
+                        <div className="text-sm">
+                          <Badge variant="outline">{task.task_type}</Badge>
+                        </div>
+                        <div className="text-sm">{task.estimated_hours}h</div>
+                        <div className="text-sm">P{task.priority}</div>
+                        <div className="text-sm">
+                          <button
+                            type="button"
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getScopeBadgeClass(task.scope)}`}
+                            onClick={() =>
+                              setTasks((prev) =>
+                                prev.map((t) =>
+                                  t.id === task.id ? { ...t, scope: nextScope(t.scope || "must_have") } : t
+                                )
+                              )
+                            }
+                          >
+                            {getScopeLabel(task.scope || "must_have")}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {!tasks.length && <div className="py-6 text-sm text-gray-500">Run AI task breakdown to populate tasks.</div>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <Button variant="outline" onClick={prevStep}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Requirements
+                </Button>
+                <Button onClick={nextStep} disabled={!tasksReady}>
+                  Continue to Resources
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeStep === "resources" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Team & Resources</CardTitle>
+              <CardDescription>Define your team size and capacity before planning sprints.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Team Selection */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-gray-700">Who will work on this project?</Label>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <button
+                    type="button"
+                    className={cn(
+                      "rounded-lg border-2 p-4 text-left transition-all hover:border-blue-300",
+                      teamPreset === "solo" ? "border-blue-600 bg-blue-50" : "border-gray-200"
+                    )}
+                    onClick={() => {
+                      setTeamPreset("solo")
+                      setResources([
+                        { id: "res-solo", name: "You", role: "Generalist", weekly_capacity_hours: 30 }
+                      ])
+                      setAssignments([])
+                      setStatusMessage("Team set to solo. You can plan sprints next.")
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2",
+                        teamPreset === "solo" ? "border-blue-600 bg-blue-600" : "border-gray-300"
+                      )}>
+                        {teamPreset === "solo" && <Check className="h-3 w-3 text-white" />}
+                      </div>
+                      <div className="font-semibold text-gray-900">Just Me</div>
+                    </div>
+                    <div className="text-sm text-gray-600 mb-2">Solo developer mode</div>
+                    <div className="text-xs text-gray-500">30h/week capacity</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={cn(
+                      "rounded-lg border-2 p-4 text-left transition-all hover:border-blue-300",
+                      teamPreset === "small" ? "border-blue-600 bg-blue-50" : "border-gray-200"
+                    )}
+                    onClick={() => {
+                      setTeamPreset("small")
+                      setResources(defaultResources)
+                      setAssignments([])
+                      setStatusMessage("Team set to small squad. You can plan sprints next.")
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2",
+                        teamPreset === "small" ? "border-blue-600 bg-blue-600" : "border-gray-300"
+                      )}>
+                        {teamPreset === "small" && <Check className="h-3 w-3 text-white" />}
+                      </div>
+                      <div className="font-semibold text-gray-900">Small Team</div>
+                    </div>
+                    <div className="text-sm text-gray-600 mb-2">2-3 people</div>
+                    <div className="text-xs text-gray-500">76h/week total capacity</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={cn(
+                      "rounded-lg border-2 p-4 text-left transition-all hover:border-blue-300",
+                      teamPreset === "large" ? "border-blue-600 bg-blue-50" : "border-gray-200"
+                    )}
+                    onClick={() => {
+                      setTeamPreset("large")
+                      setResources([
+                        ...defaultResources,
+                        { id: "res-4", name: "Backend Dev", role: "Backend", weekly_capacity_hours: 32 },
+                        { id: "res-5", name: "QA", role: "QA", weekly_capacity_hours: 32 }
+                      ])
+                      setAssignments([])
+                      setStatusMessage("Team set to larger group. You can plan sprints next.")
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2",
+                        teamPreset === "large" ? "border-blue-600 bg-blue-600" : "border-gray-300"
+                      )}>
+                        {teamPreset === "large" && <Check className="h-3 w-3 text-white" />}
+                      </div>
+                      <div className="font-semibold text-gray-900">Larger Team</div>
+                    </div>
+                    <div className="text-sm text-gray-600 mb-2">4-5 people</div>
+                    <div className="text-xs text-gray-500">140h/week total capacity</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Team Members */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Users2 className="h-4 w-4 text-blue-600" />
+                    Team Members
+                  </CardTitle>
+                  <CardDescription>Your selected team and their weekly capacity</CardDescription>
+                </CardHeader>
+                <CardContent className="grid md:grid-cols-3 gap-3">
+                  {resources.map((resource) => (
+                    <div key={resource.id} className="rounded-lg border p-3">
+                      <div className="font-semibold text-gray-900">{resource.name}</div>
+                      <div className="text-sm text-gray-600">{resource.role}</div>
+                      <div className="text-sm text-gray-500 mt-2">
+                        {resource.weekly_capacity_hours}h/week
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Capacity Analysis */}
+              <Card className="border-blue-100 bg-blue-50/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-gray-900">Capacity vs. Required Effort</CardTitle>
+                  <CardDescription>Can your team handle the workload?</CardDescription>
+                </CardHeader>
+                <CardContent className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <div className="text-xs text-gray-600 mb-1">Total Team Capacity</div>
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {resources.reduce((sum, r) => sum + r.weekly_capacity_hours, 0)}h/week
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-600 mb-1">Required Effort</div>
+                    <div className="text-2xl font-semibold text-gray-900">{totalHours}h total</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-600 mb-1">Estimated Duration</div>
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {resources.reduce((sum, r) => sum + r.weekly_capacity_hours, 0) > 0
+                        ? Math.ceil(totalHours / resources.reduce((sum, r) => sum + r.weekly_capacity_hours, 0))
+                        : 0}{" "}
+                      weeks
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      (at full capacity)
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <Button variant="outline" onClick={prevStep}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Tasks
+                </Button>
+                <Button onClick={nextStep} disabled={!resourcesReady}>
+                  Continue to Sprint Planning
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeStep === "sprints" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Sprint Planning</CardTitle>
+              <CardDescription>Plan sprints based on your tasks and team capacity, then review before creating.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Sprint Planning Controls */}
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-gray-600">Sprint length</Label>
@@ -1611,117 +1896,42 @@ export default function NewProjectWizard() {
                         variant={pace === level ? "default" : "outline"}
                         onClick={() => setPace(level)}
                       >
-                        {level === "conservative" && "Conservative"}
-                        {level === "normal" && "Normal"}
-                        {level === "aggressive" && "Aggressive"}
+                        {level === "conservative" && "Conservative (80%)"}
+                        {level === "normal" && "Normal (100%)"}
+                        {level === "aggressive" && "Aggressive (120%)"}
                       </Button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Total hours</CardTitle>
-                    <CardDescription>tasks.estimated_hours</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">{totalHours}h</div>
-                    {analysis && (
-                      <div className="text-xs text-gray-500">
-                        Est. vs AI: {Math.round((totalHours / analysis.effort_estimate_hours) * 100) || 0}% of {analysis.effort_estimate_hours}h
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Sprints</CardTitle>
-                    <CardDescription>sprints records</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">{sprints.length || 0}</div>
-                    <div className="text-xs text-gray-500">order_index + dates</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Tasks</CardTitle>
-                    <CardDescription>task_type / priority / sprint links</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">{tasks.length || 0}</div>
-                    <div className="text-xs text-gray-500">
-                      Status set to pending{topEffortArea ? ` · Most effort: ${topEffortArea}` : ""}
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={runSprintPlan} disabled={!tasks.length || isLoading.plan}>
+                  {isLoading.plan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarRange className="h-4 w-4 mr-2" />}
+                  Plan sprints & dates
+                </Button>
+                <Button onClick={autoAllocateResources} disabled={!tasks.length || !sprints.length}>
+                  <Users2 className="h-4 w-4 mr-2" />
+                  Auto-allocate resources
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveStep("tasks")}
+                >
+                  Adjust tasks
+                </Button>
               </div>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <ClipboardList className="h-4 w-4 text-slate-600" />
-                    Task Backlog
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-7 text-xs font-medium text-gray-500">
-                    <div className="col-span-2">Title</div>
-                    <div>Type</div>
-                    <div>Estimate</div>
-                    <div>Priority</div>
-                    <div>Scope</div>
-                    <div>Sprint</div>
-                  </div>
-                  <div className="divide-y">
-                    {tasks.map((task) => (
-                      <div key={task.id} className="grid grid-cols-7 py-3 items-start">
-                        <div className="col-span-2">
-                          <div className="font-medium text-gray-900">{task.title}</div>
-                          <p className="text-sm text-gray-600">{task.description}</p>
-                        </div>
-                        <div className="text-sm">
-                          <Badge variant="outline">{task.task_type}</Badge>
-                        </div>
-                        <div className="text-sm">{task.estimated_hours}h</div>
-                        <div className="text-sm">P{task.priority}</div>
-                        <div className="text-sm">
-                          <button
-                            type="button"
-                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getScopeBadgeClass(task.scope)}`}
-                            onClick={() =>
-                              setTasks((prev) =>
-                                prev.map((t) =>
-                                  t.id === task.id ? { ...t, scope: nextScope(t.scope || "must_have") } : t
-                                )
-                              )
-                            }
-                          >
-                            {getScopeLabel(task.scope || "must_have")}
-                          </button>
-                        </div>
-                        <div className="text-sm">
-                          {task.sprint_id ? (
-                            <Badge variant="secondary">{sprints.find((s) => s.id === task.sprint_id)?.name || "Sprint"}</Badge>
-                          ) : (
-                            <Badge variant="outline">Unplanned</Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {!tasks.length && <div className="py-6 text-sm text-gray-500">Run AI task breakdown to populate tasks.</div>}
-                  </div>
-                </CardContent>
-              </Card>
-
+              {/* Sprints List */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <CalendarRange className="h-4 w-4 text-indigo-600" />
-                    Sprints
+                    Sprint Plan
                   </CardTitle>
+                  <CardDescription>{timelineSummary}</CardDescription>
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-3">
                   {sprintLoads.map((sprint) => (
@@ -1741,150 +1951,63 @@ export default function NewProjectWizard() {
                       <Progress value={Math.min(100, (sprint.hours / (totalHours || 1)) * 100)} />
                     </div>
                   ))}
-                  {!sprints.length && <div className="text-sm text-gray-500">Run sprint planning to generate sprint records.</div>}
+                  {!sprints.length && (
+                    <div className="col-span-2 py-6 text-sm text-gray-500 text-center">
+                      Run sprint planning to generate sprint timeline.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* Navigation */}
-              <div className="flex justify-between items-center pt-6 border-t">
-                <Button variant="outline" onClick={prevStep}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Requirements
-                </Button>
-                <Button onClick={nextStep} disabled={!backlogReady}>
-                  Continue to Plan
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {activeStep === "plan" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Project Plan & Resource Allocation</CardTitle>
-              <CardDescription>Check timeline, workload, and how hours are spread across the team before saving.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Who will work on this?</Label>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={teamPreset === "solo" ? "default" : "outline"}
-                    onClick={() => {
-                      setTeamPreset("solo")
-                      setResources([
-                        { id: "res-solo", name: "You", role: "Generalist", weekly_capacity_hours: 30 }
-                      ])
-                      setAssignments([])
-                      setStatusMessage("Team set to just you. Run auto-allocate again to rebalance tasks.")
-                    }}
-                  >
-                    Just me
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={teamPreset === "small" ? "default" : "outline"}
-                    onClick={() => {
-                      setTeamPreset("small")
-                      setResources(defaultResources)
-                      setAssignments([])
-                      setStatusMessage("Team set to a small squad. Run auto-allocate again to rebalance tasks.")
-                    }}
-                  >
-                    Small team (2–3)
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={teamPreset === "large" ? "default" : "outline"}
-                    onClick={() => {
-                      setTeamPreset("large")
-                      setResources([
-                        ...defaultResources,
-                        { id: "res-4", name: "Backend Dev", role: "Backend", weekly_capacity_hours: 32 },
-                        { id: "res-5", name: "QA", role: "QA", weekly_capacity_hours: 32 }
-                      ])
-                      setAssignments([])
-                      setStatusMessage("Team set to a larger group. Run auto-allocate again to rebalance tasks.")
-                    }}
-                  >
-                    Larger team (4–5)
-                  </Button>
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={autoAllocateResources} disabled={!tasks.length}>
-                  <Users2 className="h-4 w-4 mr-2" />
-                  Auto-allocate resources
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setActiveStep("backlog")}
-                >
-                  Simplify scope
-                </Button>
-              </div>
-
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold text-gray-900">Quick recap before you create</CardTitle>
-                  <CardDescription>Make sure the plan matches your intent.</CardDescription>
+                  <CardTitle className="text-sm font-semibold text-gray-900">Final Review</CardTitle>
+                  <CardDescription>Confirm your plan before creating the project.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-3 text-sm text-gray-700">
-                  <div>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">Goal & outcome</div>
-                    <div className="font-medium text-gray-900 line-clamp-3">
-                      {projectMeta.goal || "No goal written yet"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">Timeline</div>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-3 text-sm">
                     <div>
-                      Target finish:{" "}
-                      {estimatedFinishDate ? formatDate(estimatedFinishDate) : "Not estimated yet"}
+                      <div className="text-xs font-semibold text-gray-600 mb-1">Goal</div>
+                      <div className="text-gray-900 line-clamp-3">
+                        {projectMeta.goal || "No goal written yet"}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      Timeline risk (based on workload): {timelineRisk}
+                    <div>
+                      <div className="text-xs font-semibold text-gray-600 mb-1">Timeline</div>
+                      <div className="text-gray-900">
+                        {estimatedFinishDate ? formatDate(estimatedFinishDate) : "Not estimated"}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Risk: <span className={cn(
+                          timelineRisk === "High" ? "text-red-600 font-medium" :
+                          timelineRisk === "Medium" ? "text-amber-600 font-medium" :
+                          "text-emerald-600"
+                        )}>{timelineRisk}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-gray-600 mb-1">Scope</div>
+                      <div className="text-gray-900">{sprints.length} sprints · {tasks.length} tasks</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Avg utilization: {overallUtilization}%
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">Scope & team load</div>
-                    <div>{sprints.length} sprints · {tasks.length} tasks</div>
-                    <div className="text-xs text-gray-500">
-                      Average team utilization: {overallUtilization}%
+                  <div className="grid gap-3 md:grid-cols-3 pt-2 border-t">
+                    <div className="text-center p-3 rounded-lg bg-gray-50">
+                      <div className="text-xs text-gray-600">Total Effort</div>
+                      <div className="text-2xl font-semibold text-gray-900">{totalHours}h</div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Target className="h-4 w-4 text-emerald-600" />
-                    Timeline summary
-                  </CardTitle>
-                  <CardDescription>{timelineSummary}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid md:grid-cols-3 gap-3">
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-gray-500">Total planned hours</div>
-                    <div className="text-xl font-semibold">{totalHours}h</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-gray-500">Buffer</div>
-                    <div className="text-xl font-semibold">{bufferPercentage}%</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-gray-500">Sprints</div>
-                    <div className="text-xl font-semibold">{sprints.length}</div>
+                    <div className="text-center p-3 rounded-lg bg-gray-50">
+                      <div className="text-xs text-gray-600">Buffer</div>
+                      <div className="text-2xl font-semibold text-gray-900">{bufferPercentage}%</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-gray-50">
+                      <div className="text-xs text-gray-600">Team Capacity</div>
+                      <div className="text-2xl font-semibold text-gray-900">
+                        {resources.reduce((sum, r) => sum + r.weekly_capacity_hours, 0)}h/wk
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1932,9 +2055,9 @@ export default function NewProjectWizard() {
               <div className="flex justify-between items-center pt-6 border-t">
                 <Button variant="outline" onClick={prevStep}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Sprints
+                  Back to Resources
                 </Button>
-                <Button onClick={saveProject} disabled={isLoading.saving}>
+                <Button onClick={saveProject} disabled={isLoading.saving || !sprintsReady}>
                   {isLoading.saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                   Create Project
                   {!isLoading.saving && <ArrowRight className="h-4 w-4 ml-2" />}
