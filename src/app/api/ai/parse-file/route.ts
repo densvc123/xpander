@@ -76,9 +76,10 @@ async function parsePDF(file: File): Promise<string> {
 async function parseExcel(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const uint8Array = new Uint8Array(arrayBuffer)
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(buffer)
+    // @ts-ignore - ExcelJS accepts Uint8Array but types don't reflect it
+    await workbook.xlsx.load(uint8Array)
 
     let content = ''
 
@@ -88,7 +89,10 @@ async function parseExcel(file: File): Promise<string> {
       content += '='.repeat(50) + '\n\n'
 
       worksheet.eachRow({ includeEmpty: false }, (row) => {
-        const rowText = row.values
+        const values = row.values
+        if (!values || !Array.isArray(values)) return
+
+        const rowText = values
           .slice(1) // first element is workbook metadata
           .map((cell) => {
             if (cell === null || cell === undefined) return ''
@@ -120,9 +124,9 @@ async function parseExcel(file: File): Promise<string> {
 async function parseDOCX(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const buffer = Buffer.from(arrayBuffer) as Buffer
 
-    const result = await mammoth.extractRawText({ buffer })
+    const result = await mammoth.extractRawText({ buffer: buffer as Buffer })
 
     if (!result.value || result.value.trim().length === 0) {
       throw new Error('DOCX file appears to be empty')
