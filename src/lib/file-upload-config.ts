@@ -58,7 +58,7 @@ export function validateFile(file: File): { valid: boolean; error?: string } {
 
   // Check file extension
   const extension = file.name.split('.').pop()?.toLowerCase()
-  if (!extension || !FILE_UPLOAD_CONFIG.ALLOWED_EXTENSIONS.includes(extension)) {
+  if (!extension || !(FILE_UPLOAD_CONFIG.ALLOWED_EXTENSIONS as readonly string[]).includes(extension)) {
     return {
       valid: false,
       error: `Unsupported file type. Please use: ${FILE_UPLOAD_CONFIG.FORMATS_LIST}`
